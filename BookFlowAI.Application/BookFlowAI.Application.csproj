@@ -9,6 +9,7 @@
   <ItemGroup>
     <PackageReference Include="AutoMapper" Version="16.2.0" />
     <PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="12.1.1" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.19" />
   </ItemGroup>
 
   <ItemGroup>
@@ -16,9 +17,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="Common\Interfaces\" />
     <Folder Include="Common\Models\" />
-    <Folder Include="DTOs\" />
     <Folder Include="Mappings\" />
     <Folder Include="Services\" />
     <Folder Include="Validators\" />

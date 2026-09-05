@@ -1,44 +1,123 @@
-
 using BookFlowAI.Application;
 using BookFlowAI.Infrastructure;
+using Microsoft.OpenApi.Models;
 using Serilog;
 
 namespace BookFlowAI.Api
 {
     public class Program
     {
-        public static void Main(string[] args)
+        public static async Task Main(string[] args)
         {
             var builder = WebApplication.CreateBuilder(args);
 
+            // =========================================================
+            // 1. Serilog Configuration
+            // =========================================================
             builder.Host.UseSerilog((context, loggerConfig) =>
-    loggerConfig.ReadFrom.Configuration(context.Configuration));
+                loggerConfig.ReadFrom.Configuration(context.Configuration));
+
+            // =========================================================
+            // 2. Register Application & Infrastructure Services
+            // =========================================================
             builder.Services.AddApplicationServices();
             builder.Services.AddInfrastructureServices(builder.Configuration);
 
-            // Add services to the container.
+            // =========================================================
+            // 3. CORS Configuration
+            // =========================================================
+            builder.Services.AddCors(options =>
+            {
+                options.AddPolicy("AllowAll", policy =>
+                {
+                    policy.AllowAnyHeader()
+                          .AllowAnyMethod()
+                          .SetIsOriginAllowed(_ => true)
+                          .AllowCredentials();
+                });
+            });
+
+            // =========================================================
+            // 4. Controllers & Endpoints
+            // =========================================================
             builder.Services.AddControllers();
             builder.Services.AddEndpointsApiExplorer();
-            builder.Services.AddSwaggerGen();
+
+            // =========================================================
+            // 5. Swagger Configuration
+            // =========================================================
+            builder.Services.AddSwaggerGen(options =>
+            {
+                options.SwaggerDoc("v1", new OpenApiInfo
+                {
+                    Title = "BookFlowAI API",
+                    Version = "v1"
+                });
+
+                options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+                {
+                    Name = "Authorization",
+                    Type = SecuritySchemeType.Http,
+                    Scheme = "Bearer",
+                    BearerFormat = "JWT",
+                    In = ParameterLocation.Header,
+                    Description = "Enter your JWT token."
+                });
+
+                options.AddSecurityRequirement(new OpenApiSecurityRequirement
+                {
+                    {
+                        new OpenApiSecurityScheme
+                        {
+                            Reference = new OpenApiReference
+                            {
+                                Type = ReferenceType.SecurityScheme,
+                                Id = "Bearer"
+                            }
+                        },
+                        Array.Empty<string>()
+                    }
+                });
+            });
+
+            // =========================================================
+            // 6. SignalR
+            // =========================================================
             builder.Services.AddSignalR();
 
             var app = builder.Build();
 
-            // Configure the HTTP request pipeline.
+            // =========================================================
+            // HTTP Request Pipeline
+            // =========================================================
+
             if (app.Environment.IsDevelopment())
             {
                 app.UseSwagger();
-                app.UseSwaggerUI();
+                app.UseSwaggerUI(c =>
+                {
+                    c.SwaggerEndpoint("/swagger/v1/swagger.json", "BookFlowAI API v1");
+                });
             }
 
             app.UseSerilogRequestLogging();
             app.UseHttpsRedirection();
+
+            app.UseCors("AllowAll");
+
             app.UseAuthentication();
             app.UseAuthorization();
 
-
             app.MapControllers();
-            //app.MapHub<NotificationHub>("/hubs/notifications"); // „”«— SignalR
+
+            // =========================================================
+            // Automatic Database Migration & Seeding
+            // =========================================================
+            using (var scope = app.Services.CreateScope())
+            {
+                var dbContext = scope.ServiceProvider.GetRequiredService<BookFlowAI.Infrastructure.ApplicationDbContext>();
+                await BookFlowAI.Infrastructure.Persistence.DbInitializer.SeedAsync(dbContext);
+            }
 
             app.Run();
         }
