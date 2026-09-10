@@ -10,6 +10,16 @@ services:
       - "1433:1433"
     volumes:
       - sqlserver_data:/var/opt/mssql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          '/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "YourStrongPassword123!" -C -Q "SELECT 1" || /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P "YourStrongPassword123!" -Q "SELECT 1"',
+        ]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
     networks:
       - bookflow-network
 
@@ -24,6 +34,18 @@ services:
       - ./ai_service:/app
     environment:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/readyz').read() or urllib.request.urlopen('http://localhost:8000/healthz').read()",
+        ]
+      interval: 20s
+      timeout: 10s
+      retries: 10
+      start_period: 20s
     networks:
       - bookflow-network
 
@@ -39,9 +61,43 @@ services:
       - ASPNETCORE_ENVIRONMENT=Development
       - ConnectionStrings__DefaultConnection=Server=sqlserver,1433;Database=BookFlowDb;User Id=sa;Password=YourStrongPassword123!;TrustServerCertificate=True;MultipleActiveResultSets=true
       - AiService__BaseUrl=http://ai_service:8000
+      - JwtSettings__Secret=${JWT_SECRET:-super-secret-key-please-change-this-now-12345}
+      - JwtSettings__Issuer=BookFlowAI
+      - JwtSettings__Audience=BookFlowAI-Clients
     depends_on:
-      - sqlserver
-      - ai_service
+      sqlserver:
+        condition: service_healthy
+      ai_service:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -fsS http://localhost:8080/readyz || curl -fsS http://localhost:8080/healthz",
+        ]
+      interval: 20s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    networks:
+      - bookflow-network
+
+  frontend:
+    image: node:20-alpine
+    container_name: bookflow_frontend
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+    command: sh -c "npm install && npm run dev"
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:5000/api
+      - NEXT_PUBLIC_SIGNALR_URL=http://localhost:5000/hubs/bookings
+      - NEXT_PUBLIC_AI_API_URL=http://localhost:5000/api
+    depends_on:
+      webapi:
+        condition: service_healthy
     networks:
       - bookflow-network
 

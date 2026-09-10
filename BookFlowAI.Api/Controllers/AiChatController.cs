@@ -28,12 +28,10 @@ namespace BookFlowAI.Api.Controllers
 
             int businessId = request.BusinessId > 0 ? request.BusinessId : 1;
 
-            // تحويل سجل المحادثة القادم من الـ Frontend إلى ChatMessageDto
             var historyDtos = request.ConversationHistory?
                 .Select(h => new ChatMessageDto(h.Role, h.Content))
                 .ToList();
 
-            // 1. تجهيز وإرسال الطلب لخدمة الذكاء الاصطناعي
             var aiClientRequest = new AiChatClientRequest(
                 BusinessId: businessId,
                 SessionId: request.SessionId,
@@ -43,7 +41,6 @@ namespace BookFlowAI.Api.Controllers
 
             var aiResponse = await _aiServiceClient.SendChatMessageAsync(aiClientRequest);
 
-            // 2. إرجاع الاستجابة الموحدة للـ Frontend
             string replyMessage = aiResponse?.Reply
                 ?? "عذراً، حدث خطأ أثناء التواصل مع خدمة الذكاء الاصطناعي. يرجى المحاولة لاحقاً.";
 
@@ -54,6 +51,19 @@ namespace BookFlowAI.Api.Controllers
                 IsFallback: aiResponse?.IsFallback ?? true,
                 Timestamp: DateTime.UtcNow
             ));
+        }
+
+        [HttpPost("predict-no-show")]
+        public async Task<ActionResult<AiPredictResponse>> PredictNoShow([FromBody] AiPredictRequest request)
+        {
+            var prediction = await _aiServiceClient.PredictNoShowAsync(request);
+
+            if (prediction == null)
+            {
+                return Ok(new AiPredictResponse(0.2d, "Low", "fallback", true));
+            }
+
+            return Ok(prediction);
         }
     }
 }

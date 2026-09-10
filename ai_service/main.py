@@ -61,6 +61,18 @@ async def health_check():
     return {"status": "ok", "service": "BookFlowAI.AI Engine", "version": "2.0.0"}
 
 
+@app.get("/healthz", tags=["Health"])
+async def healthz_check():
+    """Health endpoint compatible with orchestration, load balancers, and uptime monitors."""
+    return {"status": "ok", "service": "BookFlowAI.AI Engine", "version": "2.0.0"}
+
+
+@app.get("/readyz", tags=["Health"])
+async def readyz_check():
+    """Readiness endpoint for container orchestration."""
+    return {"status": "ready", "service": "BookFlowAI.AI Engine", "version": "2.0.0"}
+
+
 @app.post(
     "/predict-no-show",
     response_model=NoShowPredictionResponse,
