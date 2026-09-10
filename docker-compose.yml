@@ -13,6 +13,20 @@ services:
     networks:
       - bookflow-network
 
+  ai_service:
+    build:
+      context: ./ai_service
+      dockerfile: Dockerfile
+    container_name: bookflow_ai_service
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./ai_service:/app
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    networks:
+      - bookflow-network
+
   webapi:
     image: bookflow-api
     container_name: bookflow_api
@@ -24,8 +38,10 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ConnectionStrings__DefaultConnection=Server=sqlserver,1433;Database=BookFlowDb;User Id=sa;Password=YourStrongPassword123!;TrustServerCertificate=True;MultipleActiveResultSets=true
+      - AiService__BaseUrl=http://ai_service:8000
     depends_on:
       - sqlserver
+      - ai_service
     networks:
       - bookflow-network
 

@@ -1,5 +1,7 @@
-using BookFlowAI.Application;
+﻿using BookFlowAI.Application;
+using BookFlowAI.Application.Common.Interfaces;
 using BookFlowAI.Infrastructure;
+using BookFlowAI.Infrastructure.Services;
 using Microsoft.OpenApi.Models;
 using Serilog;
 
@@ -109,7 +111,7 @@ namespace BookFlowAI.Api
             app.UseAuthorization();
 
             app.MapControllers();
-
+            app.MapHub<BookFlowAI.Api.Hubs.BookingHub>("/hubs/bookings");
             // =========================================================
             // Automatic Database Migration & Seeding
             // =========================================================
@@ -118,6 +120,11 @@ namespace BookFlowAI.Api
                 var dbContext = scope.ServiceProvider.GetRequiredService<BookFlowAI.Infrastructure.ApplicationDbContext>();
                 await BookFlowAI.Infrastructure.Persistence.DbInitializer.SeedAsync(dbContext);
             }
+            builder.Services.AddHttpClient<IAiServiceClient, AiServiceClient>(client =>
+            {
+                // اسم الـ container في Docker Compose
+                client.BaseAddress = new Uri(builder.Configuration["AiService:BaseUrl"] ?? "http://ai_service:8000");
+            });
 
             app.Run();
         }
