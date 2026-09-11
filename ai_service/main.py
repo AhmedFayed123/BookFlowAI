@@ -9,8 +9,6 @@ from schemas import (
     IngestBusinessDataRequest,
     StandardErrorResponse, ErrorDetail
 )
-from ml_engine import predict_no_show
-from rag_engine import ingest_business_data_to_vector_db, generate_chat_response
 
 # إعداد الـ Logging
 logging.basicConfig(level=logging.INFO)
@@ -80,6 +78,7 @@ async def readyz_check():
 )
 async def predict_no_show_endpoint(request: NoShowPredictionRequest):
     """حساب احتمالية عدم حضور العميل بناءً على نموذج ML متقدم"""
+    from ml_engine import predict_no_show
     return predict_no_show(request)
 
 
@@ -90,6 +89,7 @@ async def predict_no_show_endpoint(request: NoShowPredictionRequest):
 )
 async def chat_endpoint(request: ChatRequest):
     """المساعد الذكي للإجابة على استفسارات العملاء بناءً على سياق المنشأة"""
+    from rag_engine import generate_chat_response
     return await generate_chat_response(request)
 
 
@@ -99,6 +99,7 @@ async def chat_endpoint(request: ChatRequest):
 )
 async def ingest_business_data_endpoint(request: IngestBusinessDataRequest):
     """تحديث قاعدة المعرفة (Vector DB) بخدمات وسياسات المنشأة"""
+    from rag_engine import ingest_business_data_to_vector_db
     count = ingest_business_data_to_vector_db(request)
     return {
         "success": True,

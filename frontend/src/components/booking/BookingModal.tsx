@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
+import { CalendarDays, Check, CheckCircle2, Clock3, ShieldCheck, UserRound, X } from "lucide-react";
 import {
   bookingsApi,
   staffApi,
@@ -10,6 +11,9 @@ import {
   type ServiceDto,
   type StaffProfileDto,
 } from "../../lib/api";
+import { calculateBookingEstimate } from "../../lib/serviceFilters";
+import { combineLocalDateAndTime, getUpcomingLocalDates, toLocalDateInputValue } from "../../lib/booking";
+import { useToast } from "../ui/ToastProvider";
 
 const api = {
   staff: {
@@ -18,7 +22,6 @@ const api = {
   },
   bookings: {
     create: bookingsApi.create,
-    getById: bookingsApi.getById,
   },
 };
 
@@ -49,31 +52,8 @@ type BookingModalProps = {
   onClose: () => void;
 };
 
-const getRiskBadge = (probability?: number | null) => {
-  const safeProbability = typeof probability === "number" ? probability : 0;
-
-  if (safeProbability >= 0.7) {
-    return {
-      label: "High Risk",
-      className: "bg-red-100 text-red-700 ring-red-200",
-    };
-  }
-
-  if (safeProbability >= 0.4) {
-    return {
-      label: "Medium Risk",
-      className: "bg-yellow-100 text-yellow-700 ring-yellow-200",
-    };
-  }
-
-  return {
-    label: "Low Risk",
-    className: "bg-green-100 text-green-700 ring-green-200",
-  };
-};
-
 const formatDate = (dateString: string) =>
-  new Date(dateString).toLocaleDateString(undefined, {
+  new Date(`${dateString}T12:00:00`).toLocaleDateString(undefined, {
     weekday: "short",
     month: "short",
     day: "numeric",
@@ -96,6 +76,7 @@ export default function BookingModal({
   open,
   onClose,
 }: BookingModalProps) {
+  const { toast } = useToast();
   const [step, setStep] = useState(1);
   const [staffMembers, setStaffMembers] = useState<StaffProfileDto[]>([]);
   const [slots, setSlots] = useState<AvailabilitySlotDto[]>([]);
@@ -103,10 +84,10 @@ export default function BookingModal({
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [createdBooking, setCreatedBooking] = useState<{
-    id: number;
-    noShowProbability?: number | null;
-  } | null>(null);
+  const [createdBookingId, setCreatedBookingId] = useState<number | null>(null);
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
 
   const form = useForm<BookingFormValues>({
     defaultValues: {
@@ -120,12 +101,45 @@ export default function BookingModal({
   const selectedStaff = staffMembers.find((staff) => staff.id === selectedStaffId) ?? null;
   const selectedSlot = useWatch({ control: form.control, name: "slot" });
   const selectedDate = useWatch({ control: form.control, name: "selectedDate" });
+  const quickDates = useMemo(() => getUpcomingLocalDates(7), []);
+  const configuredTaxRate = Number.isFinite(Number(process.env.NEXT_PUBLIC_TAX_RATE)) ? Number(process.env.NEXT_PUBLIC_TAX_RATE) : 0;
+  const configuredBookingFee = Number.isFinite(Number(process.env.NEXT_PUBLIC_BOOKING_FEE)) ? Math.max(0, Number(process.env.NEXT_PUBLIC_BOOKING_FEE)) : 0;
+  const estimate = calculateBookingEstimate(service?.price ?? 0, configuredTaxRate, configuredBookingFee);
+
+  useEffect(() => {
+    if (!open) return;
+    previouslyFocusedRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !submitting) {
+        onClose();
+        return;
+      }
+      if (event.key !== "Tab" || !dialogRef.current) return;
+      const focusable = Array.from(dialogRef.current.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex="-1"])',
+      ));
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.setTimeout(() => closeButtonRef.current?.focus(), 0);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+      previouslyFocusedRef.current?.focus();
+    };
+  }, [onClose, open, submitting]);
 
   useEffect(() => {
     if (!open) {
       const resetTimer = window.setTimeout(() => {
         setStep(1);
-        setCreatedBooking(null);
+        setCreatedBookingId(null);
         setErrorMessage(null);
         form.reset({
           staffId: 0,
@@ -137,23 +151,25 @@ export default function BookingModal({
       return () => window.clearTimeout(resetTimer);
     }
 
+    let active = true;
     const loadStaff = async () => {
       try {
         setLoadingStaff(true);
         const result = await api.staff.getAll(service?.id);
-        setStaffMembers(result);
+        if (active) setStaffMembers(result);
       } catch (error) {
         const message =
           error instanceof Error
             ? error.message
             : "Unable to load staff members.";
-        setErrorMessage(message);
+        if (active) setErrorMessage(message);
       } finally {
-        setLoadingStaff(false);
+        if (active) setLoadingStaff(false);
       }
     };
 
     void loadStaff();
+    return () => { active = false; };
   }, [form, open, service?.id]);
 
   useEffect(() => {
@@ -166,27 +182,35 @@ export default function BookingModal({
       return () => window.clearTimeout(resetTimer);
     }
 
+    let active = true;
     const fetchSlots = async () => {
       try {
         setLoadingSlots(true);
         const result = await api.staff.getAvailableSlots(
           selectedStaffId,
           selectedDate,
+          service?.id,
         );
-        setSlots(result.filter((slot) => slot.isAvailable));
-        form.setValue("slot", null);
+        if (active) {
+          setSlots(result.filter((slot) => slot.isAvailable));
+          form.setValue("slot", null);
+          setErrorMessage(null);
+        }
       } catch (error) {
         const message =
           error instanceof Error ? error.message : "Unable to load time slots.";
-        setErrorMessage(message);
-        setSlots([]);
+        if (active) {
+          setErrorMessage(message);
+          setSlots([]);
+        }
       } finally {
-        setLoadingSlots(false);
+        if (active) setLoadingSlots(false);
       }
     };
 
     void fetchSlots();
-  }, [form, open, selectedDate, selectedStaffId]);
+    return () => { active = false; };
+  }, [form, open, selectedDate, selectedStaffId, service?.id]);
 
   const validateStep = (currentStep: number) => {
     if (currentStep === 1) {
@@ -235,29 +259,24 @@ export default function BookingModal({
     setErrorMessage(null);
 
     try {
-      const bookingDate = new Date(
-        `${selectedDate}T${selectedSlot?.startTime ?? "00:00"}:00`,
-      );
+      const bookingDate = combineLocalDateAndTime(selectedDate, selectedSlot?.startTime ?? "");
+      if (bookingDate <= new Date()) throw new Error("Please choose a future time slot.");
       const response = await api.bookings.create({
         staffId: form.getValues("staffId"),
         serviceId: service.id,
         dateTime: bookingDate.toISOString(),
       });
 
-      const createdBookingDetails = await api.bookings.getById(
-        response.bookingId,
-      );
-      setCreatedBooking({
-        id: response.bookingId,
-        noShowProbability: createdBookingDetails.noShowProbability ?? 0,
-      });
+      setCreatedBookingId(response.bookingId);
       setStep(3);
+      toast("Your booking request was created successfully.", "success");
     } catch (error) {
       const message =
         error instanceof Error
           ? error.message
           : "Booking could not be created.";
       setErrorMessage(message);
+      toast(message, "error");
     } finally {
       setSubmitting(false);
     }
@@ -265,47 +284,44 @@ export default function BookingModal({
 
   if (!open || !service) return null;
 
-  const riskBadge = getRiskBadge(createdBooking?.noShowProbability);
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-2xl overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_30px_80px_rgba(15,23,42,0.25)]">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/65 p-0 backdrop-blur-sm sm:items-center sm:p-4" onMouseDown={(event) => { if (event.target === event.currentTarget && !submitting) onClose(); }}>
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="booking-modal-title" aria-describedby="booking-modal-description" className="max-h-[95vh] w-full max-w-3xl overflow-y-auto rounded-t-[2rem] border border-slate-200 bg-white shadow-[0_30px_90px_rgba(15,23,42,0.35)] sm:rounded-[2rem]">
         <div className="flex items-center justify-between border-b border-slate-200 bg-gradient-to-r from-violet-600 to-indigo-600 px-5 py-4 text-white">
           <div>
             <p className="text-xs uppercase tracking-[0.24em] text-violet-100">
               Booking
             </p>
-            <h3 className="mt-1 text-xl font-bold">{service.name}</h3>
+            <h3 id="booking-modal-title" className="mt-1 text-xl font-bold">{service.name}</h3>
+            <p id="booking-modal-description" className="sr-only">Choose a provider and available time, then review and confirm your appointment.</p>
           </div>
 
           <button
+            ref={closeButtonRef}
             type="button"
             onClick={onClose}
             className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-xl transition hover:bg-white/20"
             aria-label="Close booking modal"
           >
-            ×
+            <X className="h-5 w-5" />
           </button>
         </div>
 
-        {createdBooking ? (
+        {createdBookingId ? (
           <div className="space-y-6 p-6">
             <div className="rounded-3xl border border-emerald-200 bg-emerald-50 p-5">
               <div className="flex items-center justify-between gap-3">
-                <div>
+                <div className="flex items-center gap-4">
+                  <span className="grid h-12 w-12 place-items-center rounded-full bg-emerald-600 text-white"><CheckCircle2 className="h-7 w-7" /></span>
+                  <div>
                   <p className="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-700">
                     Booking confirmed
                   </p>
                   <h4 className="mt-2 text-3xl font-black text-slate-900">
-                    #{createdBooking.id}
+                    #{createdBookingId}
                   </h4>
+                  </div>
                 </div>
-
-                <span
-                  className={`inline-flex items-center rounded-full px-3 py-1.5 text-xs font-bold ring-1 ${riskBadge.className}`}
-                >
-                  {riskBadge.label}
-                </span>
               </div>
             </div>
 
@@ -350,20 +366,12 @@ export default function BookingModal({
           </div>
         ) : (
           <>
-            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3 text-sm text-slate-500">
-              <span className="font-medium text-slate-700">
-                Step {step} of 3
-              </span>
-              <div className="flex items-center gap-2">
-                {[1, 2, 3].map((currentStep) => (
-                  <div
-                    key={currentStep}
-                    className={`h-2.5 w-2.5 rounded-full ${
-                      step >= currentStep ? "bg-violet-600" : "bg-slate-200"
-                    }`}
-                  />
-                ))}
-              </div>
+            <div className="grid grid-cols-3 border-b border-slate-200 px-4 py-3 text-xs sm:px-6">
+              {[{ icon: UserRound, label: "Provider" }, { icon: CalendarDays, label: "Date & time" }, { icon: ShieldCheck, label: "Review" }].map((item, index) => {
+                const currentStep = index + 1;
+                const Icon = item.icon;
+                return <div key={item.label} className={`flex items-center justify-center gap-2 font-semibold ${step >= currentStep ? "text-violet-700" : "text-slate-400"}`}><span className={`grid h-7 w-7 place-items-center rounded-full ${step > currentStep ? "bg-emerald-100 text-emerald-700" : step === currentStep ? "bg-violet-100 text-violet-700" : "bg-slate-100"}`}>{step > currentStep ? <Check className="h-4 w-4" /> : <Icon className="h-4 w-4" />}</span><span className="hidden sm:inline">{item.label}</span></div>;
+              })}
             </div>
 
             <div className="space-y-5 p-5">
@@ -399,6 +407,7 @@ export default function BookingModal({
                     </div>
                   ) : (
                     <div className="grid gap-3">
+                      {staffMembers.length === 0 && <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-600">No available providers are assigned to this service yet.</div>}
                       {staffMembers.map((staff) => (
                         <button
                           key={staff.id}
@@ -458,13 +467,17 @@ export default function BookingModal({
                     <input
                       id="booking-date"
                       type="date"
-                      min={new Date().toISOString().split("T")[0]}
+                      min={toLocalDateInputValue(new Date())}
                       value={selectedDate}
                       onChange={(event) =>
                         form.setValue("selectedDate", event.target.value)
                       }
                       className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-violet-400"
                     />
+                  </div>
+
+                  <div className="grid grid-cols-4 gap-2 sm:grid-cols-7" aria-label="Quick date selection">
+                    {quickDates.map((date) => <button key={date} type="button" aria-label={`Select ${formatDate(date)}`} aria-pressed={selectedDate === date} onClick={() => form.setValue("selectedDate", date)} className={`rounded-xl border px-2 py-2 text-center text-xs transition ${selectedDate === date ? "border-violet-500 bg-violet-50 text-violet-800" : "border-slate-200 bg-white text-slate-600 hover:border-violet-300"}`}><span className="block font-bold">{new Date(`${date}T12:00:00`).toLocaleDateString(undefined, { weekday: "short" })}</span><span>{new Date(`${date}T12:00:00`).getDate()}</span></button>)}
                   </div>
 
                   {loadingSlots ? (
@@ -476,12 +489,16 @@ export default function BookingModal({
                         />
                       ))}
                     </div>
+                  ) : !selectedDate ? (
+                    <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">Choose a date to see live availability.</div>
                   ) : slots.length > 0 ? (
                     <div className="grid grid-cols-2 gap-3">
                       {slots.map((slot) => (
                         <button
                           key={`${slot.startTime}-${slot.endTime}`}
                           type="button"
+                          aria-label={`Select ${slot.startTime} to ${slot.endTime}`}
+                          aria-pressed={Boolean(selectedSlot && selectedSlot.startTime === slot.startTime && selectedSlot.endTime === slot.endTime)}
                           onClick={() => form.setValue("slot", slot)}
                           className={`rounded-2xl border px-3 py-3 text-left text-sm transition ${
                             selectedSlot &&
@@ -563,15 +580,14 @@ export default function BookingModal({
                         </div>
                       </div>
 
-                      <div className="text-right">
-                        <div className="text-xs uppercase tracking-[0.18em] text-slate-400">
-                          Total
-                        </div>
-                        <div className="mt-2 text-2xl font-black text-slate-900">
-                          ${service.price.toFixed(2)}
-                        </div>
-                      </div>
+                      <Clock3 className="h-6 w-6 text-violet-600" />
                     </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-violet-200 bg-violet-50/70 p-4">
+                    <h5 className="font-bold text-slate-900">Price estimate</h5>
+                    <dl className="mt-3 space-y-2 text-sm"><div className="flex justify-between text-slate-600"><dt>Service subtotal</dt><dd>${estimate.subtotal.toFixed(2)}</dd></div><div className="flex justify-between text-slate-600"><dt>Estimated taxes</dt><dd>${estimate.tax.toFixed(2)}</dd></div><div className="flex justify-between text-slate-600"><dt>Booking fee</dt><dd>${estimate.fee.toFixed(2)}</dd></div><div className="flex justify-between border-t border-violet-200 pt-2 text-base font-black text-slate-950"><dt>Estimated total</dt><dd>${estimate.total.toFixed(2)}</dd></div></dl>
+                    <p className="mt-3 text-xs leading-5 text-slate-500">Final taxes or fees depend on your business configuration and are confirmed before payment.</p>
                   </div>
                 </div>
               )}
@@ -587,7 +603,7 @@ export default function BookingModal({
               </button>
 
               <div className="flex items-center gap-3">
-                {step > 1 && !createdBooking && (
+                {step > 1 && !createdBookingId && (
                   <button
                     type="button"
                     onClick={handleBack}
@@ -597,7 +613,7 @@ export default function BookingModal({
                   </button>
                 )}
 
-                {!createdBooking && (
+                {!createdBookingId && (
                   <button
                     type="button"
                     onClick={step === 3 ? handleSubmit : handleNext}

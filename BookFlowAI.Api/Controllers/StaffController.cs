@@ -83,7 +83,7 @@ namespace BookFlowAI.Api.Controllers
 
         // GET /api/staff/5/availability?date=2026-09-10
         [HttpGet("{id:int}/availability")]
-        public async Task<ActionResult<IEnumerable<AvailabilitySlotDto>>> GetAvailability(int id, [FromQuery] DateTime date)
+        public async Task<ActionResult<IEnumerable<AvailabilitySlotDto>>> GetAvailability(int id, [FromQuery] DateTime date, [FromQuery] int? serviceId = null)
         {
             if (date == default) return BadRequest(new { message = "A valid date is required." });
             if (!await _context.StaffMembers.AnyAsync(staff => staff.Id == id && staff.IsAvailable))
@@ -91,6 +91,18 @@ namespace BookFlowAI.Api.Controllers
             if (await _context.StaffTimeOffRequests.AnyAsync(request => request.StaffId == id
                 && request.Date == date.Date && request.Status == "Approved"))
                 return Ok(Array.Empty<AvailabilitySlotDto>());
+
+            var slotDuration = 30;
+            if (serviceId.HasValue)
+            {
+                var assignedService = await _context.StaffServices
+                    .Where(assignment => assignment.StaffId == id && assignment.ServiceId == serviceId.Value
+                        && assignment.Service.IsActive)
+                    .Select(assignment => assignment.Service.DurationInMinutes)
+                    .FirstOrDefaultAsync();
+                if (assignedService <= 0) return BadRequest(new { message = "This provider is not assigned to the selected service." });
+                slotDuration = assignedService;
+            }
 
             var dayOfWeek = date.DayOfWeek;
 
@@ -114,16 +126,16 @@ namespace BookFlowAI.Api.Controllers
                 var current = schedule.StartTime;
                 while (current < schedule.EndTime)
                 {
-                    var slotEnd = current.Add(TimeSpan.FromMinutes(30));
+                    var slotEnd = current.Add(TimeSpan.FromMinutes(slotDuration));
                     if (slotEnd > schedule.EndTime) break;
                     var slotStartDateTime = date.Date.Add(current);
 
                     bool isBooked = existingBookings.Any(b =>
-                        b.DateTime < slotStartDateTime.AddMinutes(30) &&
+                        b.DateTime < slotStartDateTime.AddMinutes(slotDuration) &&
                         b.DateTime.AddMinutes(b.Service.DurationInMinutes) > slotStartDateTime);
 
                     slots.Add(new AvailabilitySlotDto(current, slotEnd, !isBooked));
-                    current = slotEnd;
+                    current = current.Add(TimeSpan.FromMinutes(30));
                 }
             }
 

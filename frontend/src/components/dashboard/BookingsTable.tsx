@@ -1,10 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { BookingDetailDto } from "../../lib/api";
+import { Search, SlidersHorizontal } from "lucide-react";
+import type { AdminBookingDto } from "../../lib/api";
 
 type BookingsTableProps = {
-  bookings: BookingDetailDto[];
+  bookings: AdminBookingDto[];
   onCancelBooking: (bookingId: number) => Promise<void> | void;
   onStatusChange: (
     bookingId: number,
@@ -70,6 +71,7 @@ export default function BookingsTable({
         !normalizedSearch ||
         [
           booking.serviceName,
+          booking.customerName,
           booking.staffName,
           booking.status,
           booking.serviceId,
@@ -99,18 +101,19 @@ export default function BookingsTable({
         </div>
 
         <div className="flex flex-col gap-3 md:flex-row md:items-center">
+          <label className="relative"><span className="sr-only">Search bookings</span><Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Search bookings"
-            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-violet-400 md:w-64"
-          />
+            className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-3 text-sm text-slate-700 outline-none focus:border-violet-400 md:w-64"
+          /></label>
 
-          <select
+          <label className="relative"><span className="sr-only">Filter by status</span><SlidersHorizontal className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><select
             value={statusFilter}
             onChange={(event) => setStatusFilter(event.target.value)}
-            className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-violet-400"
+            className="rounded-2xl border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-8 text-sm text-slate-700 outline-none focus:border-violet-400"
           >
             <option value="All">All statuses</option>
             <option value="Pending">Pending</option>
@@ -118,7 +121,7 @@ export default function BookingsTable({
             <option value="Completed">Completed</option>
             <option value="Cancelled">Cancelled</option>
             <option value="NoShow">No Show</option>
-          </select>
+          </select></label>
         </div>
       </div>
 
@@ -154,7 +157,7 @@ export default function BookingsTable({
                 >
                   <td className="rounded-l-2xl px-3 py-3">
                     <div className="font-semibold text-slate-900">
-                      {booking.staffName}
+                      {booking.customerName}
                     </div>
                     <div className="text-xs text-slate-500">#{booking.id}</div>
                   </td>
@@ -194,7 +197,7 @@ export default function BookingsTable({
 
                   <td className="rounded-r-2xl px-3 py-3">
                     <div className="flex flex-wrap gap-2">
-                      <button
+                      {booking.status === "Pending" && <button
                         type="button"
                         onClick={() =>
                           void onStatusChange(booking.id, "confirm")
@@ -202,9 +205,9 @@ export default function BookingsTable({
                         className="rounded-xl bg-blue-600 px-2.5 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-500"
                       >
                         Confirm
-                      </button>
+                      </button>}
 
-                      <button
+                      {(booking.status === "Pending" || booking.status === "Confirmed") && <button
                         type="button"
                         onClick={() =>
                           void onStatusChange(booking.id, "complete")
@@ -212,15 +215,23 @@ export default function BookingsTable({
                         className="rounded-xl bg-emerald-600 px-2.5 py-1.5 text-xs font-semibold text-white transition hover:bg-emerald-500"
                       >
                         Complete
-                      </button>
+                      </button>}
 
-                      <button
+                      {(booking.status === "Pending" || booking.status === "Confirmed") && <button
+                        type="button"
+                        onClick={() => void onStatusChange(booking.id, "mark-no-show")}
+                        className="rounded-xl border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs font-semibold text-amber-800 transition hover:bg-amber-100"
+                      >
+                        No-show
+                      </button>}
+
+                      {(booking.status === "Pending" || booking.status === "Confirmed") && <button
                         type="button"
                         onClick={() => void onCancelBooking(booking.id)}
                         className="rounded-xl bg-rose-600 px-2.5 py-1.5 text-xs font-semibold text-white transition hover:bg-rose-500"
                       >
                         Cancel
-                      </button>
+                      </button>}
                     </div>
                   </td>
                 </tr>

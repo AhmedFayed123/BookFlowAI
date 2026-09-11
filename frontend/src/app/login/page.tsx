@@ -7,8 +7,8 @@ import { authApi, authStorage, type AuthResponse } from "../../lib/api";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("admin@bookflow.com");
-  const [password, setPassword] = useState("Admin@123456");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -40,7 +40,9 @@ export default function LoginPage() {
         return;
       }
 
-      router.push("/");
+      const requestedPath = new URLSearchParams(window.location.search).get("returnTo");
+      const safeReturnPath = requestedPath?.startsWith("/") && !requestedPath.startsWith("//") ? requestedPath : "/";
+      router.push(safeReturnPath);
     } catch (requestError) {
       setError(
         requestError instanceof Error
@@ -57,7 +59,7 @@ export default function LoginPage() {
       <div className="w-full max-w-md rounded-[30px] border border-slate-200 bg-white p-8 shadow-[0_20px_60px_rgba(15,23,42,0.12)]">
         <div className="mb-8 text-center">
           <div className="inline-flex rounded-full bg-violet-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-violet-700">
-            BookFlowAI
+            BookFlow AI
           </div>
           <h1 className="mt-4 text-3xl font-black text-slate-900">
             Welcome back
@@ -69,30 +71,36 @@ export default function LoginPage() {
 
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
-            <label className="mb-2 block text-sm font-medium text-slate-700">
+            <label htmlFor="email" className="mb-2 block text-sm font-medium text-slate-700">
               Email
             </label>
             <input
+              id="email"
+              name="email"
               type="email"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
               className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-800 outline-none transition focus:border-violet-400 focus:bg-white"
               placeholder="name@company.com"
               required
+              autoComplete="email"
             />
           </div>
 
           <div>
-            <label className="mb-2 block text-sm font-medium text-slate-700">
+            <label htmlFor="password" className="mb-2 block text-sm font-medium text-slate-700">
               Password
             </label>
             <input
+              id="password"
+              name="password"
               type="password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-800 outline-none transition focus:border-violet-400 focus:bg-white"
               placeholder="••••••••"
               required
+              autoComplete="current-password"
             />
           </div>
 

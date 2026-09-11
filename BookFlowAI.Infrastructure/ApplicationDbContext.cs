@@ -26,6 +26,8 @@ namespace BookFlowAI.Infrastructure
         public DbSet<StaffTimeOffRequest> StaffTimeOffRequests => Set<StaffTimeOffRequest>();
         public DbSet<Review> Reviews => Set<Review>();
         public DbSet<BusinessInfo> BusinessInfos => Set<BusinessInfo>();
+        public DbSet<KnowledgeDocument> KnowledgeDocuments => Set<KnowledgeDocument>();
+        public DbSet<KnowledgeChunk> KnowledgeChunks => Set<KnowledgeChunk>();
         public DbSet<RefreshToken> RefreshTokens { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -105,6 +107,24 @@ namespace BookFlowAI.Infrastructure
             });
 
             modelBuilder.Entity<User>().HasIndex(user => user.Email).IsUnique();
+
+            modelBuilder.Entity<KnowledgeDocument>(entity =>
+            {
+                entity.Property(document => document.Title).HasMaxLength(200);
+                entity.Property(document => document.SourceType).HasMaxLength(50);
+                entity.Property(document => document.SourceName).HasMaxLength(200);
+                entity.HasMany(document => document.Chunks)
+                    .WithOne(chunk => chunk.KnowledgeDocument)
+                    .HasForeignKey(chunk => chunk.KnowledgeDocumentId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<KnowledgeChunk>(entity =>
+            {
+                entity.Property(chunk => chunk.Content).HasColumnType("nvarchar(max)");
+                entity.Property(chunk => chunk.EmbeddingJson).HasColumnType("nvarchar(max)");
+                entity.HasIndex(chunk => new { chunk.KnowledgeDocumentId, chunk.ChunkIndex }).IsUnique();
+            });
 
             // RefreshToken Relationship
             modelBuilder.Entity<RefreshToken>(entity =>

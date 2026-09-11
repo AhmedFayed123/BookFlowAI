@@ -1,3 +1,120 @@
+<!-- Portfolio-ready README -->
+
+# 🚀 BookFlow AI — Production-Grade Multi-Tenant AI Booking Engine
+
+> **BookFlow AI** is an industry-agnostic, enterprise-ready SaaS booking and resource orchestration platform powered by **.NET 9**, **FastAPI (AI/ML)**, **Next.js 16**, and **SQL Server**. Built using a BFF-style architecture with real-time SignalR hubs, predictive ML, and RAG-enabled conversational assistants.
+
+---
+
+## 🏗️ System Architecture
+
+```text
++-----------------------------------------------------------------------+
+|                           Next.js 16 Frontend                         |
+|                    (Tailwind CSS, SignalR Client, React)             |
++-----------------------------------+-----------------------------------+
+                                    |
+                            HTTP / WebSockets
+                                    v
++-----------------------------------+-----------------------------------+
+|                    .NET 9 Web API (BFF Gateway)                       |
+|           (EF Core, JWT Auth, SignalR Hubs, AutoMapper, RBAC)         |
++-----------------+---------------------------------+-------------------+
+                  |                                 |
+           SQL Queries / Migrations                 | HTTP REST API
+                  v                                 v
++-----------------+---------------+   +-------------+-------------------+
+|     SQL Server 2022 Database     |   |      Python FastAPI (AI)        |
+|  (Multi-Tenant Data, Bookings)  |   | (Predictive ML & RAG Assistant)  |
++---------------------------------+   +---------------------------------+
+```
+
+## ✨ Core Features
+
+- Multi-Industry Dynamic Scheduling — support Clinics, Beauty & Wellness, Gyms, Auto, Consulting, and other appointment-driven businesses.
+- AI No-Show Risk Prediction — FastAPI ML model scores bookings to prioritize reminders and reduce revenue loss.
+- RAG-Assisted Conversational AI — integrated knowledge store (ChromaDB) + Gemini API for contextual assistant experiences.
+- Real-time Hubs & Notifications — SignalR-based live updates for admins, staff, and customers.
+- Admin Portal & RBAC — manage staff, services, schedules, and business configuration across tenants.
+
+## 📦 Getting Started (Dockerized)
+
+### Prerequisites
+
+- Docker Desktop (Windows / macOS / Linux)
+- Optional: `docker-compose` (included with Docker Desktop)
+
+### Quickstart
+
+From the repository root:
+
+```bash
+docker compose up --build
+```
+
+This will build and start services:
+
+- `sqlserver` — Microsoft SQL Server
+- `ai_service` — Python FastAPI AI service (port 8000)
+- `webapi` — .NET 9 API (port 5000)
+- `frontend` — Next.js frontend (port 3000)
+
+Wait for health checks to succeed (compose uses `service_healthy` dependencies).
+
+### Health endpoints
+
+- Frontend: `http://localhost:3000/` (UI)
+- API ready: `http://localhost:5000/readyz` or `http://localhost:5000/healthz`
+- AI service ready: `http://localhost:8000/readyz`
+
+If a container fails to start (example: SQL Server), inspect logs:
+
+```powershell
+docker-compose logs -f sqlserver
+docker logs bookflow_sqlserver --tail 200
+```
+
+## 🖼️ Screenshots
+
+Add screenshots in the `screenshots/` folder. Suggested images:
+
+- `screenshots/landing.png` — Landing page with service filters
+- `screenshots/admin.png` — Admin dashboard
+- `screenshots/staff.png` — Staff schedule view
+- `screenshots/chat.png` — AI assistant widget
+
+## 🛠️ Development Notes
+
+- Frontend: `frontend/` (Next.js 16, React 19, Tailwind)
+- API: `BookFlowAI.Api/` (.NET 9 Web API)
+- Application layer: `BookFlowAI.Application/`
+- Domain models: `BookFlowAI.Domain/`
+- Infrastructure & EF: `BookFlowAI.Infrastructure/`
+- AI service: `ai_service/` (FastAPI + `no_show_model_v2.joblib`)
+
+### Local frontend quick dev
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+## ✅ Production Checklist
+
+- Replace dev secrets (JWT_SECRET, GEMINI_API_KEY) with secure secrets in environment or vault.
+- Configure SQL Server backups and migrations (EF Core migrations).
+- Harden CORS, rate limits, and authentication flows.
+- Add CI/CD to build images, run tests, and deploy to staging.
+
+## 🙌 Contributing
+
+Contributions welcome — please open issues or PRs for features, UI polish, and production hardening.
+
+## License
+
+Add your license file here (e.g., `LICENSE.md`) or state your company policy.
+
 # BookFlowAI
 
 BookFlowAI is a full-stack SaaS-style booking and AI operations platform built as a production-ready portfolio project. It combines a .NET 9 clean-architecture backend, a Python FastAPI AI microservice, and a modern Next.js frontend to deliver a real booking flow with AI no-show risk prediction, RAG-powered support, and live administrative operations.
@@ -63,7 +180,7 @@ docker compose up --build
 The stack includes:
 
 - Frontend: http://localhost:3000
-- API Swagger: ![1789117868238](image/README/1789117868238.png)
+- API Swagger: http://localhost:5000/Swagger
 - AI service docs: http://localhost:8000/docs
 - Health endpoint: http://localhost:5000/healthz
 - AI health endpoint: http://localhost:8000/healthz

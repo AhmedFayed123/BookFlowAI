@@ -27,7 +27,7 @@ namespace BookFlowAI.Api.Controllers
                 .Where(s => s.IsActive && s.BusinessCategory.IsActive)
                 .OrderBy(s => s.BusinessCategory.Name).ThenBy(s => s.Name)
                 .Select(s => new ServiceDto(s.Id, s.Name, s.Description, s.Price, s.DurationInMinutes,
-                    s.BusinessCategoryId, s.BusinessCategory.Name, s.IsActive))
+                    s.BusinessCategoryId, s.BusinessCategory.Name, s.IsActive, s.Bookings.Count))
                 .ToListAsync();
 
             return Ok(services);
@@ -41,7 +41,7 @@ namespace BookFlowAI.Api.Controllers
                 .AsNoTracking()
                 .Where(item => item.Id == id && item.IsActive)
                 .Select(item => new ServiceDto(item.Id, item.Name, item.Description, item.Price,
-                    item.DurationInMinutes, item.BusinessCategoryId, item.BusinessCategory.Name, item.IsActive))
+                    item.DurationInMinutes, item.BusinessCategoryId, item.BusinessCategory.Name, item.IsActive, item.Bookings.Count))
                 .FirstOrDefaultAsync();
             if (service == null) return NotFound("الخدمة غير موجودة.");
 
@@ -50,7 +50,7 @@ namespace BookFlowAI.Api.Controllers
         // POST /api/services (إضافة خدمة جديدة - أدمن فقط)
         [Authorize(Roles = "Admin")]
         [HttpPost]
-        public async Task<ActionResult<Service>> Create([FromBody] CreateServiceDto dto)
+        public async Task<ActionResult<ServiceDto>> Create([FromBody] CreateServiceDto dto)
         {
             if (dto.DurationInMinutes <= 0 || dto.Price < 0)
                 return BadRequest(new { message = "Price and duration must be valid positive values." });
@@ -69,7 +69,11 @@ namespace BookFlowAI.Api.Controllers
             _context.Services.Add(service);
             await _context.SaveChangesAsync();
 
-            return CreatedAtAction(nameof(GetAll), new { id = service.Id }, service);
+            var categoryName = await _context.BusinessCategories.Where(category => category.Id == service.BusinessCategoryId)
+                .Select(category => category.Name).SingleAsync();
+            return CreatedAtAction(nameof(GetById), new { id = service.Id },
+                new ServiceDto(service.Id, service.Name, service.Description, service.Price, service.DurationInMinutes,
+                    service.BusinessCategoryId, categoryName, service.IsActive, 0));
         }
 
         // PUT /api/services/{id} (تعديل خدمة - أدمن فقط)

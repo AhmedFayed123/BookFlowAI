@@ -93,6 +93,7 @@ export interface ServiceDto {
     price: number;
     durationInMinutes: number;
     isActive: boolean;
+    bookingCount: number;
 }
 
 export interface BusinessCategoryDto {
@@ -261,6 +262,11 @@ export interface RequestDayOffDto {
     reason?: string | null;
 }
 
+export interface AdminBookingDto extends BookingDetailDto {
+    customerId: number;
+    customerName: string;
+}
+
 export interface AdminTimeOffRequestDto {
     id: number;
     staffId: number;
@@ -319,6 +325,23 @@ export interface UpdateBusinessAiDataDto {
     policyInfo: string;
     servicesSummary: string;
     customInstructions: string;
+}
+
+export interface KnowledgeDocumentDto {
+    id: number;
+    title: string;
+    sourceType: string;
+    sourceName: string;
+    chunkCount: number;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface KnowledgeUploadRequestDto {
+    title?: string;
+    content?: string;
+    sourceName?: string;
+    file?: File | null;
 }
 
 export interface NoShowPredictionRequest {
@@ -452,32 +475,63 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
     return config;
 });
 
-const normalizeError = (error: AxiosError<ApiErrorPayload>): ApiClientError => {
+const normalizeError = (error: AxiosError<unknown>): ApiClientError => {
     const status = error.response?.status ?? 0;
     const payload = error.response?.data ?? { message: error.message };
 
-    const message =
-        typeof payload === "object" && payload !== null
-            ? payload.message ??
-            payload.error?.message ??
-            payload.detail ??
-            error.message
-            : error.message;
+    const structured = typeof payload === "object" && payload !== null ? payload as ApiErrorPayload : null;
+    const message = typeof payload === "string"
+        ? payload
+        : structured?.message ?? structured?.error?.message ?? structured?.detail ?? error.message;
 
     return new ApiClientError(status, String(message), payload);
 };
 
+type RetryableRequestConfig = InternalAxiosRequestConfig & { _retry?: boolean };
+let refreshPromise: Promise<AuthResponse> | null = null;
+
+const tryRefreshSession = async (): Promise<AuthResponse> => {
+    const accessToken = readTokenFromStorage();
+    const refreshToken = typeof window === "undefined" ? null : window.localStorage.getItem("refresh_token");
+    if (!accessToken || !refreshToken) throw new Error("No refresh session is available.");
+
+    const response = await axios.post<ApiEnvelope<AuthResponse> | AuthResponse>(
+        `${API_BASE_URL}/auth/refresh-token`,
+        { accessToken, refreshToken } satisfies RefreshTokenRequest,
+        { headers: { "Content-Type": "application/json" }, withCredentials: true },
+    );
+    const result = unwrapData(response.data);
+    window.localStorage.setItem("access_token", result.token);
+    window.localStorage.setItem("refresh_token", result.refreshToken);
+    document.cookie = `access_token=${encodeURIComponent(result.token)}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
+    document.cookie = `refresh_token=${encodeURIComponent(result.refreshToken)}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax`;
+    return result;
+};
+
 api.interceptors.response.use(
     (response) => response,
-    (error: AxiosError<ApiErrorPayload>) => {
+    async (error: AxiosError<unknown>) => {
         const apiError = normalizeError(error);
+        const originalRequest = error.config as RetryableRequestConfig | undefined;
 
-        if (apiError.status === 401) {
-            clearAuthStorage();
-
-            if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
-                window.location.replace(new URL("/login", window.location.origin));
+        if (apiError.status === 401 && originalRequest && !originalRequest._retry
+            && !originalRequest.url?.includes("/auth/")) {
+            originalRequest._retry = true;
+            try {
+                refreshPromise ??= tryRefreshSession().finally(() => { refreshPromise = null; });
+                const refreshed = await refreshPromise;
+                originalRequest.headers.Authorization = `Bearer ${refreshed.token}`;
+                return api.request(originalRequest);
+            } catch {
+                clearAuthStorage();
             }
+        } else if (apiError.status === 401) {
+            clearAuthStorage();
+        }
+
+        if (apiError.status === 401 && typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
+            const returnTo = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+            window.location.replace(`/login?returnTo=${encodeURIComponent(returnTo)}`);
         }
 
         return Promise.reject(apiError);
@@ -495,7 +549,7 @@ aiMicroserviceClient.interceptors.request.use((config: InternalAxiosRequestConfi
 
 aiMicroserviceClient.interceptors.response.use(
     (response) => response,
-    (error: AxiosError<ApiErrorPayload>) => {
+    (error: AxiosError<unknown>) => {
         const apiError = normalizeError(error);
         return Promise.reject(apiError);
     },
@@ -559,8 +613,8 @@ export const accountApi = {
 };
 
 export const bookingsApi = {
-    async getAll(params?: { status?: string; date?: string }): Promise<BookingDetailDto[]> {
-        const response = await api.get<BookingDetailDto[]>("/admin/bookings", { params });
+    async getAll(params?: { status?: string; date?: string }): Promise<AdminBookingDto[]> {
+        const response = await api.get<AdminBookingDto[]>("/admin/bookings", { params });
         return response.data;
     },
 
@@ -646,9 +700,9 @@ export const staffApi = {
         return response.data;
     },
 
-    async getAvailableSlots(staffId: number, date: string): Promise<AvailabilitySlotDto[]> {
+    async getAvailableSlots(staffId: number, date: string, serviceId?: number): Promise<AvailabilitySlotDto[]> {
         const response = await api.get<AvailabilitySlotDto[]>(`/staff/${staffId}/availability`, {
-            params: { date },
+            params: { date, serviceId },
         });
         return response.data;
     },
@@ -732,6 +786,29 @@ export const adminApi = {
         return response.data;
     },
 
+    async getKnowledgeDocuments(): Promise<KnowledgeDocumentDto[]> {
+        const response = await api.get<KnowledgeDocumentDto[]>("/admin/knowledge");
+        return response.data;
+    },
+
+    async uploadKnowledgeDocument(payload: KnowledgeUploadRequestDto): Promise<{ message: string; documentId: number; chunkCount: number; title: string }> {
+        const formData = new FormData();
+        if (payload.title) formData.append("title", payload.title);
+        if (payload.content) formData.append("content", payload.content);
+        if (payload.sourceName) formData.append("sourceName", payload.sourceName);
+        if (payload.file) formData.append("file", payload.file);
+
+        const response = await api.post<{ message: string; documentId: number; chunkCount: number; title: string }>("/admin/knowledge/upload", formData, {
+            headers: { "Content-Type": "multipart/form-data" },
+        });
+        return response.data;
+    },
+
+    async deleteKnowledgeDocument(id: number): Promise<{ message: string }> {
+        const response = await api.delete<{ message: string }>(`/admin/knowledge/${id}`);
+        return response.data;
+    },
+
     async getStaff(): Promise<AdminStaffDto[]> {
         const response = await api.get<AdminStaffDto[]>("/admin/staff");
         return response.data;
@@ -794,13 +871,17 @@ export const analyticsApi = {
 export { api, aiMicroserviceClient as aiMicroserviceApi, AI_BASE_URL };
 
 export const authStorage = {
+    hasActiveSession(): boolean {
+        return Boolean(readTokenFromStorage());
+    },
+
     setAccessToken(token: string): void {
         if (typeof window === "undefined") {
             return;
         }
 
         window.localStorage.setItem("access_token", token);
-        document.cookie = `access_token=${encodeURIComponent(token)}; path=/; max-age=${60 * 60 * 24 * 7}`;
+        document.cookie = `access_token=${encodeURIComponent(token)}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
     },
 
     setRefreshToken(token: string): void {
@@ -809,7 +890,7 @@ export const authStorage = {
         }
 
         window.localStorage.setItem("refresh_token", token);
-        document.cookie = `refresh_token=${encodeURIComponent(token)}; path=/; max-age=${60 * 60 * 24 * 30}`;
+        document.cookie = `refresh_token=${encodeURIComponent(token)}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax`;
     },
 
     getAccessToken: readTokenFromStorage,

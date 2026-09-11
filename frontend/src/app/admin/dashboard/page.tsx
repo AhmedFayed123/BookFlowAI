@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   bookingsApi,
-  type BookingDetailDto,
+  type AdminBookingDto,
   type BookingNotification,
   type BookingStatusUpdate,
 } from "../../../lib/api";
@@ -13,6 +13,9 @@ import DashboardSummaryCards from "../../../components/dashboard/DashboardSummar
 import BookingsTable from "../../../components/dashboard/BookingsTable";
 import AnalyticsPanel from "../../../components/dashboard/AnalyticsPanel";
 import ProtectedRoute from "../../../components/auth/ProtectedRoute";
+import ConnectionStatusBadge from "../../../components/ui/ConnectionStatusBadge";
+import { useToast } from "../../../components/ui/ToastProvider";
+import WorkspaceShell from "../../../components/ui/WorkspaceShell";
 
 const api = {
   bookings: {
@@ -23,7 +26,8 @@ const api = {
 };
 
 export default function AdminDashboardPage() {
-  const [bookings, setBookings] = useState<BookingDetailDto[]>([]);
+  const { toast } = useToast();
+  const [bookings, setBookings] = useState<AdminBookingDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState<string | null>(null);
   const [isMuted, setIsMuted] = useState(false);
@@ -98,41 +102,29 @@ export default function AdminDashboardPage() {
     }
   };
 
-  useEffect(() => {
-    let isMounted = true;
+  const loadBookings = useCallback(async (background = false) => {
+    try {
+      if (!background) setLoading(true);
+      const result = await api.bookings.getAll();
+      setBookings(result);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not load the booking dashboard.";
+      setNotice(message);
+      if (!background) toast(message, "error");
+    } finally {
+      if (!background) setLoading(false);
+    }
+  }, [toast]);
 
-    const loadBookings = async () => {
-      try {
-        setLoading(true);
-        const result = await api.bookings.getAll();
-        if (!isMounted) return;
-        setBookings(result);
-      } catch (error) {
-        if (!isMounted) return;
-        setNotice(
-          error instanceof Error
-            ? error.message
-            : "Could not load the booking dashboard.",
-        );
-      } finally {
-        if (isMounted) {
-          setLoading(false);
-        }
-      }
-    };
-
-    void loadBookings();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+  useEffect(() => { void loadBookings(); }, [loadBookings]);
 
   const handleSignalRNewBooking = (payload: BookingNotification) => {
     if (!payload?.bookingId) return;
 
-    const incomingBooking: BookingDetailDto = {
+    const incomingBooking: AdminBookingDto = {
       id: payload.bookingId,
+      customerId: payload.customerId ?? 0,
+      customerName: payload.customerName ?? "Customer",
       serviceId: payload.serviceId ?? 0,
       serviceName: payload.serviceName ?? "New Service",
       staffId: payload.staffId ?? 0,
@@ -140,16 +132,16 @@ export default function AdminDashboardPage() {
       dateTime: payload.dateTime ?? new Date().toISOString(),
       durationInMinutes: payload.durationInMinutes ?? 0,
       price: payload.price ?? 0,
-      status: (payload.status as BookingDetailDto["status"]) ?? "Pending",
+      status: payload.status ?? "Pending",
       noShowProbability: payload.noShowProbability ?? 0,
     };
 
-    setBookings((current) => [incomingBooking, ...current]);
+    setBookings((current) => current.some((booking) => booking.id === incomingBooking.id) ? current : [incomingBooking, ...current]);
     setNotice(payload.message ?? "A new booking has arrived.");
     playChime();
   };
 
-  const { isConnected } = useSignalR({
+  const { connectionStatus, reconnect } = useSignalR({
     handlers: {
       ReceiveNewBooking: handleSignalRNewBooking,
       ReceiveBookingUpdate: (payload: BookingStatusUpdate) => {
@@ -179,6 +171,14 @@ export default function AdminDashboardPage() {
     },
   });
 
+  useEffect(() => {
+    if (connectionStatus === "connected") return;
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") void loadBookings(true);
+    }, 30_000);
+    return () => window.clearInterval(interval);
+  }, [connectionStatus, loadBookings]);
+
   const handleCancelBooking = async (bookingId: number) => {
     try {
       await api.bookings.cancel(bookingId);
@@ -189,10 +189,12 @@ export default function AdminDashboardPage() {
             : booking,
         ),
       );
+      toast("Booking cancelled.", "success");
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Could not cancel booking.";
       setNotice(message);
+      toast(message, "error");
     }
   };
 
@@ -218,29 +220,20 @@ export default function AdminDashboardPage() {
           }
         }),
       );
+      toast("Booking status updated.", "success");
     } catch (error) {
       const message =
         error instanceof Error
           ? error.message
           : "Could not update booking status.";
       setNotice(message);
+      toast(message, "error");
     }
   };
 
   return (
-    <ProtectedRoute requiredRole="Admin"><div className="min-h-screen bg-slate-100 px-4 py-6 md:px-8">
-      <div className="mx-auto max-w-7xl space-y-6">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-violet-600">
-              Admin operations
-            </p>
-            <h1 className="mt-2 text-3xl font-black text-slate-900">
-              Operations Dashboard
-            </h1>
-          </div>
-
-          <div className="flex items-center gap-3">
+    <ProtectedRoute requiredRole="Admin">
+      <WorkspaceShell role="Admin" eyebrow="Admin operations" title="Operations dashboard" description="Monitor demand, booking health, and team activity from one live command center." actions={<>
             <Link href="/admin/staff" className="rounded-full border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-semibold text-violet-700">
               Manage staff
             </Link>
@@ -252,17 +245,8 @@ export default function AdminDashboardPage() {
               {isMuted ? "Enable chime" : "Mute chime"}
             </button>
 
-            <div
-              className={`rounded-full border px-3 py-2 text-sm font-semibold ${
-                isConnected
-                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                  : "border-slate-200 bg-white text-slate-700"
-              }`}
-            >
-              {isConnected ? "Live" : "Offline"}
-            </div>
-          </div>
-        </div>
+            <ConnectionStatusBadge status={connectionStatus} onRetry={() => void reconnect()} />
+          </>}>
 
         {notice && (
           <div className="rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-700">
@@ -294,7 +278,7 @@ export default function AdminDashboardPage() {
             onStatusChange={handleStatusChange}
           />
         )}
-      </div>
-    </div></ProtectedRoute>
+      </WorkspaceShell>
+    </ProtectedRoute>
   );
 }

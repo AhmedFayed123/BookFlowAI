@@ -19,7 +19,9 @@ namespace BookFlowAI.Infrastructure
         {
             // 1. تسجيل DbContext في قاعدة البيانات
             services.AddDbContext<ApplicationDbContext>(options =>
-                options.UseSqlServer(configuration.GetConnectionString("DefaultConnection")));
+                options.UseSqlServer(
+                    configuration.GetConnectionString("DefaultConnection"),
+                    sql => sql.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery)));
 
             // 2. ربط الواجهة IApplicationDbContext بـ ApplicationDbContext
             services.AddScoped<IApplicationDbContext>(provider =>
@@ -27,6 +29,7 @@ namespace BookFlowAI.Infrastructure
 
             // 3. تسجيل خدمة المصادقة AuthService
             services.AddScoped<IAuthService, AuthService>();
+            services.AddScoped<IEmbeddingService, EmbeddingService>();
             // داخل Infrastructure/DependencyInjection.cs
             services.AddAuthentication(options =>
             {

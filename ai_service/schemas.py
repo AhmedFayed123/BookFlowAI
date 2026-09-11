@@ -42,6 +42,7 @@ class NoShowPredictionRequest(BaseModel):
     """
 
     model_config = ConfigDict(
+        protected_namespaces=(),
         json_schema_extra={
             "example": {
                 "customer_id": 1024,
@@ -98,6 +99,7 @@ class NoShowPredictionResponse(BaseModel):
     """نتيجة توقع احتمالية عدم حضور العميل"""
 
     model_config = ConfigDict(
+        protected_namespaces=(),
         json_schema_extra={
             "example": {
                 "probability": 0.42,

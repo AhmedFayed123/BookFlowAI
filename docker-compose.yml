@@ -54,9 +54,11 @@ services:
     container_name: bookflow_api
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.api
     ports:
       - "5000:8080"
+    volumes:
+      - api_data_protection:/root/.aspnet/DataProtection-Keys
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ConnectionStrings__DefaultConnection=Server=sqlserver,1433;Database=BookFlowDb;User Id=sa;Password=YourStrongPassword123!;TrustServerCertificate=True;MultipleActiveResultSets=true
@@ -70,11 +72,7 @@ services:
       ai_service:
         condition: service_healthy
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "bash -c 'exec 3<>/dev/tcp/localhost/8080'",
-        ]
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/localhost/8080'"]
       interval: 20s
       timeout: 10s
       retries: 10
@@ -105,6 +103,7 @@ services:
 volumes:
   sqlserver_data:
   frontend_node_modules:
+  api_data_protection:
 
 networks:
   bookflow-network:

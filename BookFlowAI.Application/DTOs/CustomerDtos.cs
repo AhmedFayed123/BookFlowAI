@@ -11,7 +11,8 @@
         int DurationInMinutes,
         int BusinessCategoryId = 0,
         string BusinessCategoryName = "Uncategorized",
-        bool IsActive = true
+        bool IsActive = true,
+        int BookingCount = 0
     );
 
     public record BusinessCategoryDto(

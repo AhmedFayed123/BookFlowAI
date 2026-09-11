@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   analyticsApi,
   type AnalyticsSummaryDto,
@@ -20,8 +20,10 @@ export default function AnalyticsPanel() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const loadAnalytics = useCallback(() => {
     let active = true;
+    setLoading(true);
+    setError(null);
     Promise.all([
       analyticsApi.getSummary(),
       analyticsApi.getServicesPerformance(),
@@ -39,6 +41,8 @@ export default function AnalyticsPanel() {
     return () => { active = false; };
   }, []);
 
+  useEffect(() => loadAnalytics(), [loadAnalytics]);
+
   const maxRevenue = useMemo(() => Math.max(...services.map((item) => item.totalRevenueGenerated), 1), [services]);
   const maxPeak = useMemo(() => Math.max(...peakHours.map((item) => item.bookingCount), 1), [peakHours]);
   const completionHealth = Math.max(0, 100 - summary.cancellationRatePercentage - noShow.overallNoShowRatePercentage);
@@ -50,7 +54,7 @@ export default function AnalyticsPanel() {
         <div className={`rounded-full border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] ${error ? "border-rose-200 bg-rose-50 text-rose-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}>{loading ? "Syncing..." : error ? "Unavailable" : "Live"}</div>
       </div>
 
-      {error && <p className="rounded-2xl bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}
+      {error && <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-rose-50 p-3 text-sm text-rose-700"><p>{error}</p><button type="button" onClick={loadAnalytics} className="rounded-xl bg-rose-700 px-3 py-2 text-xs font-bold text-white">Retry analytics</button></div>}
 
       <div className="grid gap-4 md:grid-cols-4">
         {[

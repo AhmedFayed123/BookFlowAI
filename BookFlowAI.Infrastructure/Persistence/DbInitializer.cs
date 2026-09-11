@@ -43,7 +43,7 @@ namespace BookFlowAI.Infrastructure.Persistence
             var users = new[]
             {
                 new { Name = "System Admin", Email = "admin@bookflow.com", Password = "Admin@123456", Role = "Admin", Phone = "01000000000" },
-                new { Name = "Dr. Maya Hassan", Email = "maya.provider@bookflow.com", Password = "Provider@123", Role = "Staff", Phone = "01000000001" },
+                new { Name = "Dr. Maya Hassan", Email = "maya.provider@bookflow.com", Password = ".", Role = "Staff", Phone = "01000000001" },
                 new { Name = "Omar Nabil", Email = "omar.provider@bookflow.com", Password = "Provider@123", Role = "Staff", Phone = "01000000002" },
                 new { Name = "Lina Farid", Email = "lina.provider@bookflow.com", Password = "Provider@123", Role = "Staff", Phone = "01000000003" },
                 new { Name = "Demo Customer", Email = "customer@bookflow.com", Password = "Customer@123", Role = "Customer", Phone = "01000000004" }

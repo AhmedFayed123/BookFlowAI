@@ -146,4 +146,20 @@
         string ServicesSummary,
         string CustomInstructions
     );
+
+    public record KnowledgeDocumentDto(
+        int Id,
+        string Title,
+        string SourceType,
+        string SourceName,
+        int ChunkCount,
+        DateTime CreatedAt,
+        DateTime UpdatedAt
+    );
+
+    public record KnowledgeUploadRequestDto(
+        string? Title,
+        string? Content,
+        string? SourceName
+    );
 }

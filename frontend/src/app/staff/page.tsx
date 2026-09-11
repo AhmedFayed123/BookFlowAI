@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import ProtectedRoute from "../../components/auth/ProtectedRoute";
+import ConnectionStatusBadge from "../../components/ui/ConnectionStatusBadge";
+import { useToast } from "../../components/ui/ToastProvider";
+import WorkspaceShell from "../../components/ui/WorkspaceShell";
 import { useSignalR } from "../../hooks/useSignalR";
 import {
   bookingsApi,
@@ -11,6 +14,7 @@ import {
   type StaffBookingItemDto,
   type StaffScheduleDto,
 } from "../../lib/api";
+import { toLocalDateInputValue } from "../../lib/booking";
 
 const statusStyle: Record<string, string> = {
   Pending: "bg-amber-100 text-amber-800",
@@ -21,9 +25,10 @@ const statusStyle: Record<string, string> = {
 };
 
 export default function StaffWorkspacePage() {
+  const { toast } = useToast();
   const [bookings, setBookings] = useState<StaffBookingItemDto[]>([]);
   const [schedule, setSchedule] = useState<StaffScheduleDto[]>([]);
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().slice(0, 10));
+  const [selectedDate, setSelectedDate] = useState(toLocalDateInputValue(new Date()));
   const [dayOffDate, setDayOffDate] = useState("");
   const [dayOffReason, setDayOffReason] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
@@ -56,7 +61,7 @@ export default function StaffWorkspacePage() {
     setNotice(payload.message);
   };
 
-  const { isConnected } = useSignalR({
+  const { connectionStatus, reconnect } = useSignalR({
     handlers: {
       ReceiveNewBooking: (payload: BookingNotification) => {
         if (payload.dateTime?.slice(0, 10) === selectedDate) void loadBookings();
@@ -67,6 +72,14 @@ export default function StaffWorkspacePage() {
     },
   });
 
+  useEffect(() => {
+    if (connectionStatus === "connected") return;
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") void loadBookings();
+    }, 30_000);
+    return () => window.clearInterval(interval);
+  }, [connectionStatus, loadBookings]);
+
   const updateStatus = async (
     bookingId: number,
     action: "confirm" | "complete" | "mark-no-show",
@@ -74,9 +87,12 @@ export default function StaffWorkspacePage() {
     try {
       const result = await bookingsApi.updateStatus(bookingId, action);
       setNotice(result.message);
+      toast(result.message, "success");
       await loadBookings();
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "Could not update booking.");
+      const message = error instanceof Error ? error.message : "Could not update booking.";
+      setNotice(message);
+      toast(message, "error");
     }
   };
 
@@ -87,22 +103,17 @@ export default function StaffWorkspacePage() {
       setNotice(result.message);
       setDayOffDate("");
       setDayOffReason("");
+      toast(result.message, "success");
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "Could not submit the request.");
+      const message = error instanceof Error ? error.message : "Could not submit the request.";
+      setNotice(message);
+      toast(message, "error");
     }
   };
 
   return (
     <ProtectedRoute requiredRole="Staff">
-      <main className="min-h-screen bg-slate-100 px-4 py-8 md:px-8">
-        <div className="mx-auto max-w-6xl space-y-6">
-          <header className="flex flex-wrap items-center justify-between gap-3">
-            <div><p className="text-xs font-bold uppercase tracking-[0.2em] text-violet-600">Provider workspace</p>
-              <h1 className="mt-2 text-3xl font-black text-slate-900">My schedule and bookings</h1></div>
-            <span className={`rounded-full px-3 py-2 text-sm font-semibold ${isConnected ? "bg-emerald-100 text-emerald-800" : "bg-white text-slate-600"}`}>
-              {isConnected ? "Live updates on" : "Reconnecting"}
-            </span>
-          </header>
+      <WorkspaceShell role="Staff" eyebrow="Provider workspace" title="My schedule and bookings" description="Stay ahead of today’s appointments and keep your availability up to date." actions={<ConnectionStatusBadge status={connectionStatus} onRetry={() => void reconnect()} />}>
 
           {notice && <div className="rounded-2xl border border-violet-200 bg-violet-50 p-4 text-sm text-violet-800">{notice}</div>}
 
@@ -119,16 +130,16 @@ export default function StaffWorkspacePage() {
 
               <form onSubmit={requestDayOff} className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
                 <h2 className="font-bold text-slate-900">Request time off</h2>
-                <input type="date" min={new Date().toISOString().slice(0, 10)} value={dayOffDate} onChange={(event) => setDayOffDate(event.target.value)} required className="mt-4 w-full rounded-xl border border-slate-200 p-3" />
+                <input aria-label="Requested day off" type="date" min={toLocalDateInputValue(new Date())} value={dayOffDate} onChange={(event) => setDayOffDate(event.target.value)} required className="mt-4 w-full rounded-xl border border-slate-200 p-3" />
                 <textarea value={dayOffReason} onChange={(event) => setDayOffReason(event.target.value)} placeholder="Reason (optional)" className="mt-3 w-full rounded-xl border border-slate-200 p-3" />
-                <button className="mt-3 w-full rounded-xl bg-violet-600 px-4 py-3 font-semibold text-white">Submit request</button>
+                <button type="submit" className="mt-3 w-full rounded-xl bg-violet-600 px-4 py-3 font-semibold text-white">Submit request</button>
               </form>
             </div>
 
             <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <h2 className="font-bold text-slate-900">Assigned bookings</h2>
-                <input type="date" value={selectedDate} onChange={(event) => setSelectedDate(event.target.value)} className="rounded-xl border border-slate-200 p-2" />
+                <input aria-label="Bookings date" type="date" value={selectedDate} onChange={(event) => setSelectedDate(event.target.value)} className="rounded-xl border border-slate-200 p-2" />
               </div>
               <div className="mt-5 space-y-3">
                 {loading ? <p className="text-slate-500">Loading…</p> : bookings.length === 0 ? <p className="text-slate-500">No bookings for this date.</p> : bookings.map((booking) => (
@@ -138,17 +149,16 @@ export default function StaffWorkspacePage() {
                       <span className={`h-fit rounded-full px-3 py-1 text-xs font-bold ${statusStyle[booking.status] ?? "bg-slate-100 text-slate-700"}`}>{booking.status}</span>
                     </div>
                     {(booking.status === "Pending" || booking.status === "Confirmed") && <div className="mt-4 flex flex-wrap gap-2">
-                      {booking.status === "Pending" && <button onClick={() => void updateStatus(booking.id, "confirm")} className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white">Confirm</button>}
-                      <button onClick={() => void updateStatus(booking.id, "complete")} className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white">Complete</button>
-                      <button onClick={() => void updateStatus(booking.id, "mark-no-show")} className="rounded-lg bg-rose-600 px-3 py-2 text-sm font-semibold text-white">No-show</button>
+                      {booking.status === "Pending" && <button type="button" onClick={() => void updateStatus(booking.id, "confirm")} className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white">Confirm</button>}
+                      <button type="button" onClick={() => void updateStatus(booking.id, "complete")} className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white">Complete</button>
+                      <button type="button" onClick={() => void updateStatus(booking.id, "mark-no-show")} className="rounded-lg bg-rose-600 px-3 py-2 text-sm font-semibold text-white">No-show</button>
                     </div>}
                   </article>
                 ))}
               </div>
             </div>
           </section>
-        </div>
-      </main>
+      </WorkspaceShell>
     </ProtectedRoute>
   );
 }

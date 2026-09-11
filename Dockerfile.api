@@ -1,0 +1,19 @@
+FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS base
+WORKDIR /app
+EXPOSE 8080
+
+FROM mcr.microsoft.com/dotnet/sdk:9.0 AS publish
+WORKDIR /src
+COPY ["BookFlowAI.Api/BookFlowAI.Api.csproj", "BookFlowAI.Api/"]
+COPY ["BookFlowAI.Application/BookFlowAI.Application.csproj", "BookFlowAI.Application/"]
+COPY ["BookFlowAI.Domain/BookFlowAI.Domain.csproj", "BookFlowAI.Domain/"]
+COPY ["BookFlowAI.Infrastructure/BookFlowAI.Infrastructure.csproj", "BookFlowAI.Infrastructure/"]
+RUN dotnet restore "BookFlowAI.Api/BookFlowAI.Api.csproj"
+COPY . .
+WORKDIR /src/BookFlowAI.Api
+RUN dotnet publish "BookFlowAI.Api.csproj" -c Release -o /app/publish /p:UseAppHost=false --no-restore
+
+FROM base AS final
+WORKDIR /app
+COPY --from=publish /app/publish .
+ENTRYPOINT ["dotnet", "BookFlowAI.Api.dll"]

@@ -1,13 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { HubConnection, HubConnectionBuilder, HubConnectionState, LogLevel } from "@microsoft/signalr";
+import {
+  HubConnection,
+  HubConnectionBuilder,
+  HubConnectionState,
+  HttpTransportType,
+  LogLevel,
+  type IRetryPolicy,
+} from "@microsoft/signalr";
 import type { BookingNotification, BookingStatusUpdate } from "../lib/api";
 
 export type SignalRConnectionStatus = "connecting" | "connected" | "reconnecting" | "disconnected" | "error";
+
 export interface BookingHubEvents {
   ReceiveNewBooking: (payload: BookingNotification) => void;
   ReceiveBookingUpdate: (payload: BookingStatusUpdate) => void;
   BookingStatusUpdated: (payload: BookingStatusUpdate) => void;
 }
+
 export interface UseSignalROptions {
   hubUrl?: string;
   accessToken?: string | null;
@@ -17,6 +26,13 @@ export interface UseSignalROptions {
 }
 
 const defaultHubUrl = process.env.NEXT_PUBLIC_SIGNALR_URL || "http://localhost:5000/hubs/bookings";
+const retryPolicy: IRetryPolicy = {
+  nextRetryDelayInMilliseconds: ({ previousRetryCount }) => {
+    const delays = [0, 2_000, 5_000, 10_000, 20_000, 30_000];
+    return delays[Math.min(previousRetryCount, delays.length - 1)];
+  },
+};
+
 const resolveAccessToken = () => {
   if (typeof window === "undefined") return "";
   for (const key of ["access_token", "token", "authToken"]) {
@@ -28,73 +44,180 @@ const resolveAccessToken = () => {
 };
 
 export function useSignalR(options: UseSignalROptions = {}) {
-  const { hubUrl = defaultHubUrl, accessToken, autoStart = true, onError, handlers = {} } = options;
+  const { hubUrl = defaultHubUrl, accessToken, autoStart = true } = options;
+  // keep a module-scoped singleton per hook instance to reduce rapid remount issues
   const connectionRef = useRef<HubConnection | null>(null);
-  const handlersRef = useRef<Partial<BookingHubEvents>>({});
+  const handlersRef = useRef<Partial<BookingHubEvents>>(options.handlers ?? {});
+  const onErrorRef = useRef(options.onError);
+  const retryTimerRef = useRef<number | null>(null);
+  const mountedRef = useRef(false);
+  const stoppingRef = useRef(false);
   const [isConnected, setIsConnected] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<SignalRConnectionStatus>("disconnected");
   const [error, setError] = useState<Error | null>(null);
 
-  useEffect(() => { handlersRef.current = handlers; }, [handlers]);
+  useEffect(() => { handlersRef.current = options.handlers ?? {}; }, [options.handlers]);
+  useEffect(() => { onErrorRef.current = options.onError; }, [options.onError]);
 
-  const start = useCallback(async () => {
-    if (connectionRef.current?.state === HubConnectionState.Connected
-      || connectionRef.current?.state === HubConnectionState.Connecting) return;
+  const updateStatus = useCallback((status: SignalRConnectionStatus, nextError: Error | null = null) => {
+    if (!mountedRef.current) return;
+    setConnectionStatus(status);
+    setIsConnected(status === "connected");
+    setError(nextError);
+    onErrorRef.current?.(nextError);
+  }, []);
+
+  const clearRetry = useCallback(() => {
+    if (retryTimerRef.current !== null) {
+      window.clearTimeout(retryTimerRef.current);
+      retryTimerRef.current = null;
+    }
+  }, []);
+
+  const buildConnection = useCallback(() => {
+    const useWebSocket = process.env.NEXT_PUBLIC_SIGNALR_USE_WEBSOCKET === "true";
+    const urlOptions: Record<string, unknown> = {
+      withCredentials: true,
+      accessTokenFactory: () => accessToken ?? resolveAccessToken(),
+    };
+    if (useWebSocket) {
+      // prefer direct websocket transport when backend supports it to skip negotiation races
+      // NOTE: enable by setting NEXT_PUBLIC_SIGNALR_USE_WEBSOCKET=true in your env
+      // This sets skipNegotiation and forces WebSocket transport
+      (urlOptions as any).skipNegotiation = true;
+      (urlOptions as any).transport = HttpTransportType.WebSockets;
+    }
 
     const connection = new HubConnectionBuilder()
-      .withUrl(hubUrl, { withCredentials: true, accessTokenFactory: () => accessToken ?? resolveAccessToken() })
-      .withAutomaticReconnect([0, 2000, 5000, 10000])
-      .configureLogging(LogLevel.Warning)
+      .withUrl(hubUrl, urlOptions)
+      .withAutomaticReconnect(retryPolicy)
+      // reduce library noise; we'll handle and suppress negotiation/abort cases explicitly
+      .configureLogging(LogLevel.Error)
       .build();
 
     connection.on("ReceiveNewBooking", (payload: BookingNotification) => handlersRef.current.ReceiveNewBooking?.(payload));
     connection.on("ReceiveBookingUpdate", (payload: BookingStatusUpdate) => handlersRef.current.ReceiveBookingUpdate?.(payload));
     connection.on("BookingStatusUpdated", (payload: BookingStatusUpdate) => handlersRef.current.BookingStatusUpdated?.(payload));
-    connection.onreconnecting((nextError) => { setConnectionStatus("reconnecting"); setIsConnected(false); if (nextError) setError(nextError); });
-    connection.onreconnected(() => { setConnectionStatus("connected"); setIsConnected(true); setError(null); });
-    connection.onclose((nextError) => { setConnectionStatus("disconnected"); setIsConnected(false); if (nextError) setError(nextError); });
-    connectionRef.current = connection;
-    setConnectionStatus("connecting");
+    connection.onreconnecting((nextError) => updateStatus("reconnecting", nextError ?? null));
+    connection.onreconnected(() => updateStatus("connected"));
+    connection.onclose((nextError) => {
+      if (!stoppingRef.current) updateStatus(nextError ? "error" : "disconnected", nextError ?? null);
+    });
+    return connection;
+  }, [accessToken, hubUrl, updateStatus]);
 
+  const start = useCallback(async () => {
+    clearRetry();
+    stoppingRef.current = false;
+    let connection = connectionRef.current;
+    if (!connection) {
+      connection = buildConnection();
+      connectionRef.current = connection;
+    }
+
+    // Only attempt to start if the connection is fully disconnected
+    if (connection.state !== HubConnectionState.Disconnected) return;
+
+    updateStatus("connecting");
     try {
       await connection.start();
-      setConnectionStatus("connected");
-      setIsConnected(true);
-      setError(null);
-      onError?.(null);
+      updateStatus("connected");
     } catch (caught) {
-      const nextError = caught instanceof Error ? caught : new Error("SignalR connection failed");
-      setConnectionStatus("error");
-      setError(nextError);
-      onError?.(nextError);
+      // Normalize error text from different thrown shapes
+      let errMessage = "";
+      if (caught instanceof Error) errMessage = caught.message;
+      else if (typeof caught === "string") errMessage = caught;
+      else if (caught && typeof (caught as any).toString === "function") errMessage = (caught as any).toString();
+      const msg = (errMessage || "").toLowerCase();
+
+      // Patterns that indicate negotiation/abort races or transient network aborts
+      const transientPatterns = [
+        "stopped during negotiation",
+        "the connection was stopped during negotiation",
+        "failed to start the connection",
+        "aborterror",
+        "aborted",
+        "networkerror",
+        "fetch failed",
+      ];
+
+      if (transientPatterns.some((p) => msg.includes(p))) {
+        // benign during hot reloads / strict-mode double renders — do not escalate
+        // eslint-disable-next-line no-console
+        console.debug("SignalR transient startup error (suppressed):", errMessage || caught);
+        updateStatus("disconnected", null);
+        if (mountedRef.current && !stoppingRef.current) {
+          retryTimerRef.current = window.setTimeout(() => { void start(); }, 5_000);
+        }
+        return;
+      }
+
+      const nextError = caught instanceof Error ? caught : new Error(errMessage || "Live updates are unavailable.");
+      updateStatus("error", nextError);
+      if (mountedRef.current && !stoppingRef.current) {
+        retryTimerRef.current = window.setTimeout(() => { void start(); }, 5_000);
+      }
     }
-  }, [accessToken, hubUrl, onError]);
+  }, [buildConnection, clearRetry, updateStatus]);
 
   const stop = useCallback(async () => {
+    stoppingRef.current = true;
+    clearRetry();
     const connection = connectionRef.current;
-    if (!connection) return;
+    // do not call stop while the connection is connecting or reconnecting to avoid aborting negotiation
+    if (connection) {
+      if (connection.state === HubConnectionState.Connected) {
+        try {
+          await connection.stop();
+        } catch (e) {
+          // ignore stop errors during shutdown
+          // eslint-disable-next-line no-console
+          console.warn("SignalR stop() failed:", e);
+        }
+      } else {
+        // Skip stopping during Connecting/Reconnecting states to avoid negotiation aborts
+        // eslint-disable-next-line no-console
+        console.info("Skipping SignalR.stop() because connection is not connected (state=", connection.state, ")");
+      }
+    }
     connectionRef.current = null;
-    await connection.stop();
-    setIsConnected(false);
-    setConnectionStatus("disconnected");
-  }, []);
+    updateStatus("disconnected");
+  }, [clearRetry, updateStatus]);
 
   const invoke = useCallback(async <TResult = unknown>(method: string, ...args: unknown[]): Promise<TResult> => {
     const connection = connectionRef.current;
-    if (!connection || connection.state !== HubConnectionState.Connected)
-      throw new Error("SignalR connection is not connected.");
+    if (!connection || connection.state !== HubConnectionState.Connected) {
+      throw new Error("Live updates are not connected.");
+    }
     return connection.invoke<TResult>(method, ...args);
   }, []);
 
   useEffect(() => {
-    if (!autoStart) return;
-    const timer = window.setTimeout(() => { void start(); }, 0);
-    return () => { window.clearTimeout(timer); void stop(); };
-  }, [autoStart, start, stop]);
+    mountedRef.current = true;
+    if (autoStart) void start();
+    return () => {
+      mountedRef.current = false;
+      stoppingRef.current = true;
+      clearRetry();
+      const connection = connectionRef.current;
+      // Avoid stopping while connecting/reconnecting — that can abort negotiation requests.
+      if (connection) {
+        if (connection.state === HubConnectionState.Connected) {
+          void connection.stop().catch(() => {/* ignore */ });
+        } else {
+          // when unmounting during a connect, leave the connection alone; it will either succeed or be closed by the runtime
+          // eslint-disable-next-line no-console
+          console.info("Unmounted during SignalR connect; not calling stop() to avoid negotiation abort.");
+        }
+      }
+      connectionRef.current = null;
+    };
+  }, [autoStart, clearRetry, start]);
 
   return {
     start,
     stop,
+    reconnect: start,
     invoke,
     joinAdminGroup: () => invoke("JoinAdminGroup"),
     joinStaffGroup: (staffId: number) => invoke("JoinStaffGroup", staffId),

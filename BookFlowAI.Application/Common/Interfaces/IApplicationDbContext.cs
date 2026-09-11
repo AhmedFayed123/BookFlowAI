@@ -20,6 +20,8 @@ namespace BookFlowAI.Application.Common.Interfaces
         DbSet<StaffTimeOffRequest> StaffTimeOffRequests { get; }
         DbSet<Review> Reviews { get; }
         DbSet<BusinessInfo> BusinessInfos { get; }
+        DbSet<KnowledgeDocument> KnowledgeDocuments { get; }
+        DbSet<KnowledgeChunk> KnowledgeChunks { get; }
         DbSet<RefreshToken> RefreshTokens { get; }
 
         Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);

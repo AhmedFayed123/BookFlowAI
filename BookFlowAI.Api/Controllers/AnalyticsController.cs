@@ -46,13 +46,14 @@ namespace BookFlowAI.Api.Controllers
         public async Task<ActionResult<IEnumerable<ServicePerformanceDto>>> GetServicesPerformance()
         {
             var performance = await _context.Bookings
-                .Include(b => b.Service)
-                .GroupBy(b => new { b.ServiceId, b.Service.Name })
+                // group by service properties directly so EF Core can translate to SQL
+                .GroupBy(b => new { b.ServiceId, b.Service.Name, b.Service.Price })
                 .Select(g => new ServicePerformanceDto(
                     g.Key.ServiceId,
                     g.Key.Name,
                     g.Count(),
-                    g.Where(b => b.Status == "Completed" || b.Status == "Confirmed").Sum(b => b.Service.Price)
+                    // compute revenue as number of completed/confirmed bookings times service price
+                    g.Where(b => b.Status == "Completed" || b.Status == "Confirmed").Count() * g.Key.Price
                 ))
                 .OrderByDescending(p => p.TotalBookings)
                 .ToListAsync();

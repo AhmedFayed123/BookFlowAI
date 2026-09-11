@@ -57,22 +57,24 @@ export default function RegisterPage() {
       <div className="w-full max-w-lg rounded-[30px] border border-slate-200 bg-white p-8 shadow-[0_20px_60px_rgba(15,23,42,0.12)]">
         <div className="mb-8 text-center">
           <div className="inline-flex rounded-full bg-violet-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-violet-700">
-            BookFlowAI
+            BookFlow AI
           </div>
           <h1 className="mt-4 text-3xl font-black text-slate-900">
             Create account
           </h1>
           <p className="mt-2 text-sm text-slate-500">
-            Join as a customer, staff member, or admin.
+            Create your customer account and start booking in minutes.
           </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
-            <label className="mb-2 block text-sm font-medium text-slate-700">
+            <label htmlFor="name" className="mb-2 block text-sm font-medium text-slate-700">
               Full name
             </label>
             <input
+              id="name"
+              name="name"
               type="text"
               value={form.name}
               onChange={(event) =>
@@ -80,14 +82,17 @@ export default function RegisterPage() {
               }
               className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-800 outline-none transition focus:border-violet-400 focus:bg-white"
               required
+              autoComplete="name"
             />
           </div>
 
           <div>
-            <label className="mb-2 block text-sm font-medium text-slate-700">
+            <label htmlFor="email" className="mb-2 block text-sm font-medium text-slate-700">
               Email
             </label>
             <input
+              id="email"
+              name="email"
               type="email"
               value={form.email}
               onChange={(event) =>
@@ -98,14 +103,17 @@ export default function RegisterPage() {
               }
               className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-800 outline-none transition focus:border-violet-400 focus:bg-white"
               required
+              autoComplete="email"
             />
           </div>
 
           <div>
-            <label className="mb-2 block text-sm font-medium text-slate-700">
+            <label htmlFor="phoneNumber" className="mb-2 block text-sm font-medium text-slate-700">
               Phone (optional)
             </label>
             <input
+              id="phoneNumber"
+              name="phoneNumber"
               type="tel"
               value={form.phoneNumber}
               onChange={(event) =>
@@ -115,14 +123,17 @@ export default function RegisterPage() {
                 }))
               }
               className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-800 outline-none transition focus:border-violet-400 focus:bg-white"
+              autoComplete="tel"
             />
           </div>
 
           <div>
-            <label className="mb-2 block text-sm font-medium text-slate-700">
+            <label htmlFor="password" className="mb-2 block text-sm font-medium text-slate-700">
               Password
             </label>
             <input
+              id="password"
+              name="password"
               type="password"
               value={form.password}
               onChange={(event) =>
@@ -133,6 +144,8 @@ export default function RegisterPage() {
               }
               className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-800 outline-none transition focus:border-violet-400 focus:bg-white"
               required
+              minLength={8}
+              autoComplete="new-password"
             />
           </div>
 

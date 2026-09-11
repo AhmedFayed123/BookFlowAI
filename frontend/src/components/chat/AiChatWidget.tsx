@@ -142,9 +142,10 @@ export default function AiChatWidget() {
   const [input, setInput] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string>("");
-  const [messages, setMessages] = useState<ChatMessage[]>(() =>
-    getInitialMessages(),
-  );
+  // Initialize empty on first render (server + client) to avoid SSR hydration
+  // mismatches. Load persisted history after mount in an effect.
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [mounted, setMounted] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -154,7 +155,10 @@ export default function AiChatWidget() {
   );
 
   useEffect(() => {
-    const timer = window.setTimeout(() => setSessionId(getOrCreateSessionId()), 0);
+    const timer = window.setTimeout(
+      () => setSessionId(getOrCreateSessionId()),
+      0,
+    );
     return () => window.clearTimeout(timer);
   }, []);
 
@@ -170,6 +174,22 @@ export default function AiChatWidget() {
     if (typeof window === "undefined") return;
     window.localStorage.setItem(STORAGE_HISTORY_KEY, JSON.stringify(messages));
   }, [messages]);
+
+  // Load persisted messages after mount to avoid hydration mismatches
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const initial = getInitialMessages();
+      if (initial.length) setMessages(initial);
+    } catch {
+      // ignore
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -305,7 +325,7 @@ export default function AiChatWidget() {
             </div>
 
             <div>
-              <div className="text-sm font-semibold">BookFlowAI Assistant</div>
+              <div className="text-sm font-semibold">BookFlow AI Assistant</div>
               <div className="text-[11px] text-violet-100">
                 {isLoading ? "Thinking..." : "Online now"}
               </div>
@@ -341,55 +361,63 @@ export default function AiChatWidget() {
               ref={scrollRef}
               className="h-[420px] space-y-4 overflow-y-auto bg-slate-50 px-4 py-4"
             >
-              {messages.length === 0 && (
+              {/* Render a stable placeholder on server and until client mount to avoid hydration mismatch */}
+              {!mounted && (
                 <div className="rounded-2xl bg-white p-4 text-sm text-slate-600 shadow-sm ring-1 ring-slate-200">
                   Ask about services, pricing, or your booking schedule.
                 </div>
               )}
 
-              {messages.map((message, index) => (
-                <div
-                  key={`${message.role}-${index}-${message.timestamp}`}
-                  className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
-                >
+              {mounted && messages.length === 0 && (
+                <div className="rounded-2xl bg-white p-4 text-sm text-slate-600 shadow-sm ring-1 ring-slate-200">
+                  Ask about services, pricing, or your booking schedule.
+                </div>
+              )}
+
+              {mounted &&
+                messages.map((message, index) => (
                   <div
-                    className={`flex max-w-[82%] items-start gap-2 ${message.role === "user" ? "flex-row-reverse" : ""}`}
+                    key={`${message.role}-${index}-${message.timestamp}`}
+                    className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
                   >
                     <div
-                      className={`mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
-                        message.role === "user"
-                          ? "bg-gradient-to-br from-sky-500 to-cyan-500 text-white"
-                          : "bg-gradient-to-br from-violet-500 to-indigo-500 text-white"
-                      }`}
-                    >
-                      {message.role === "user" ? "YOU" : "AI"}
-                    </div>
-
-                    <div
-                      className={`rounded-2xl px-3 py-2 text-sm shadow-sm ring-1 ${
-                        message.role === "user"
-                          ? "bg-gradient-to-r from-sky-500 to-cyan-500 text-white ring-sky-400/30"
-                          : "bg-white text-slate-700 ring-slate-200"
-                      }`}
+                      className={`flex max-w-[82%] items-start gap-2 ${message.role === "user" ? "flex-row-reverse" : ""}`}
                     >
                       <div
-                        className="break-words leading-relaxed [&_code]:rounded [&_code]:bg-slate-100 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:text-[12px] [&_code]:text-violet-700 [&_strong]:font-semibold [&_em]:italic [&_ul]:list-disc [&_ul]:space-y-1 [&_ul]:pl-5 [&_p]:mb-2 [&_p:last-child]:mb-0 [&_h3]:mb-2 [&_h3]:text-base [&_h3]:font-semibold"
-                        dangerouslySetInnerHTML={{
-                          __html: renderMarkdown(message.content),
-                        }}
-                      />
-                      <div
-                        className={`mt-2 text-[10px] ${message.role === "user" ? "text-sky-100" : "text-slate-400"}`}
+                        className={`mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
+                          message.role === "user"
+                            ? "bg-gradient-to-br from-sky-500 to-cyan-500 text-white"
+                            : "bg-gradient-to-br from-violet-500 to-indigo-500 text-white"
+                        }`}
                       >
-                        {new Date(message.timestamp).toLocaleTimeString([], {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
+                        {message.role === "user" ? "YOU" : "AI"}
+                      </div>
+
+                      <div
+                        className={`rounded-2xl px-3 py-2 text-sm shadow-sm ring-1 ${
+                          message.role === "user"
+                            ? "bg-gradient-to-r from-sky-500 to-cyan-500 text-white ring-sky-400/30"
+                            : "bg-white text-slate-700 ring-slate-200"
+                        }`}
+                      >
+                        <div
+                          className="break-words leading-relaxed [&_code]:rounded [&_code]:bg-slate-100 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:text-[12px] [&_code]:text-violet-700 [&_strong]:font-semibold [&_em]:italic [&_ul]:list-disc [&_ul]:space-y-1 [&_ul]:pl-5 [&_p]:mb-2 [&_p:last-child]:mb-0 [&_h3]:mb-2 [&_h3]:text-base [&_h3]:font-semibold"
+                          dangerouslySetInnerHTML={{
+                            __html: renderMarkdown(message.content),
+                          }}
+                        />
+                        <div
+                          className={`mt-2 text-[10px] ${message.role === "user" ? "text-sky-100" : "text-slate-400"}`}
+                        >
+                          {new Date(message.timestamp).toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                ))}
 
               {isLoading && (
                 <div className="flex justify-start">
@@ -438,7 +466,7 @@ export default function AiChatWidget() {
                       void handleSend();
                     }
                   }}
-                  placeholder="Ask BookFlowAI..."
+                  placeholder="Ask BookFlow AI..."
                   className="flex-1 border-0 bg-transparent px-2 py-2 text-sm text-slate-700 outline-none placeholder:text-slate-400"
                 />
                 <button
