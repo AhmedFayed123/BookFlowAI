@@ -218,12 +218,14 @@ namespace BookFlowAI.Api.Controllers
         [HttpPost("knowledge/upload")]
         [Consumes("multipart/form-data")]
         public async Task<IActionResult> UploadKnowledgeDocument(
-            [FromForm] IFormFile? file,
-            [FromForm] string? title,
-            [FromForm] string? content,
-            [FromForm] string? sourceName,
+            [FromForm] BookFlowAI.Api.Models.KnowledgeUploadForm request,
             CancellationToken cancellationToken = default)
         {
+            var file = request.File;
+            var title = request.Title;
+            var content = request.Content;
+            var sourceName = request.SourceName;
+
             var rawText = await ExtractTextAsync(file, title, content, cancellationToken);
             if (string.IsNullOrWhiteSpace(rawText))
             {

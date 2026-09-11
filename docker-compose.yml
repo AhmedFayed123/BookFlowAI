@@ -2,6 +2,7 @@ services:
   sqlserver:
     image: mcr.microsoft.com/mssql/server:2022-latest
     container_name: bookflow_sqlserver
+    restart: unless-stopped
     environment:
       - ACCEPT_EULA=Y
       - MSSQL_SA_PASSWORD=YourStrongPassword123!
@@ -9,17 +10,17 @@ services:
     ports:
       - "1433:1433"
     volumes:
-      - sqlserver_data:/var/opt/mssql/data
+      - sqlserver_data:/var/opt/mssql
     healthcheck:
       test:
         [
           "CMD-SHELL",
-          '/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$$MSSQL_SA_PASSWORD" -C -Q "SELECT 1" -b || /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P "$$MSSQL_SA_PASSWORD" -C -Q "SELECT 1" -b',
+          '/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$$MSSQL_SA_PASSWORD" -C -Q "SELECT TOP (1) 1 FROM model.sys.objects; SELECT TOP (1) 1 FROM msdb.sys.objects;" -b',
         ]
       interval: 20s
       timeout: 15s
-      retries: 12
-      start_period: 40s
+      retries: 30
+      start_period: 180s
     networks:
       - bookflow-network
 
@@ -28,6 +29,7 @@ services:
       context: ./ai_service
       dockerfile: Dockerfile
     container_name: bookflow_ai_service
+    restart: unless-stopped
     ports:
       - "8000:8000"
     volumes:
@@ -52,6 +54,7 @@ services:
   webapi:
     image: bookflow-api
     container_name: bookflow_api
+    restart: unless-stopped
     build:
       context: .
       dockerfile: Dockerfile.api
@@ -61,6 +64,8 @@ services:
       - api_data_protection:/root/.aspnet/DataProtection-Keys
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+      - DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false
       - ConnectionStrings__DefaultConnection=Server=sqlserver,1433;Database=BookFlowDb;User Id=sa;Password=YourStrongPassword123!;TrustServerCertificate=True;MultipleActiveResultSets=true
       - AiService__BaseUrl=http://ai_service:8000
       - JwtSettings__Secret=${JWT_SECRET:-super-secret-key-please-change-this-now-12345}
@@ -72,7 +77,7 @@ services:
       ai_service:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/localhost/8080'"]
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8080/healthz || exit 1"]
       interval: 20s
       timeout: 10s
       retries: 10
@@ -83,11 +88,12 @@ services:
   frontend:
     image: node:20-alpine
     container_name: bookflow_frontend
+    restart: unless-stopped
     working_dir: /app
     volumes:
       - ./frontend:/app
       - frontend_node_modules:/app/node_modules
-    command: sh -c "npm ci --no-audit --no-fund && npm run dev"
+    command: sh -c "npm ci --prefer-offline --no-audit --no-fund && npm run dev -- --hostname 0.0.0.0"
     ports:
       - "3000:3000"
     environment:

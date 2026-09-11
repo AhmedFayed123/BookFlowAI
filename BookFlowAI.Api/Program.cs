@@ -205,7 +205,6 @@ namespace BookFlowAI.Api
 
                 try
                 {
-                    dbContext.Database.EnsureCreated();
                     await BookFlowAI.Infrastructure.Persistence
                         .DbInitializer
                         .SeedAsync(dbContext);

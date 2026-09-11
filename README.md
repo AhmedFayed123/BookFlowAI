@@ -1,201 +1,184 @@
-<!-- Portfolio-ready README -->
-
-# 🚀 BookFlow AI — Production-Grade Multi-Tenant AI Booking Engine
-
-> **BookFlow AI** is an industry-agnostic, enterprise-ready SaaS booking and resource orchestration platform powered by **.NET 9**, **FastAPI (AI/ML)**, **Next.js 16**, and **SQL Server**. Built using a BFF-style architecture with real-time SignalR hubs, predictive ML, and RAG-enabled conversational assistants.
-
----
-
-## 🏗️ System Architecture
-
-```text
-+-----------------------------------------------------------------------+
-|                           Next.js 16 Frontend                         |
-|                    (Tailwind CSS, SignalR Client, React)             |
-+-----------------------------------+-----------------------------------+
-                                    |
-                            HTTP / WebSockets
-                                    v
-+-----------------------------------+-----------------------------------+
-|                    .NET 9 Web API (BFF Gateway)                       |
-|           (EF Core, JWT Auth, SignalR Hubs, AutoMapper, RBAC)         |
-+-----------------+---------------------------------+-------------------+
-                  |                                 |
-           SQL Queries / Migrations                 | HTTP REST API
-                  v                                 v
-+-----------------+---------------+   +-------------+-------------------+
-|     SQL Server 2022 Database     |   |      Python FastAPI (AI)        |
-|  (Multi-Tenant Data, Bookings)  |   | (Predictive ML & RAG Assistant)  |
-+---------------------------------+   +---------------------------------+
-```
-
-## ✨ Core Features
-
-- Multi-Industry Dynamic Scheduling — support Clinics, Beauty & Wellness, Gyms, Auto, Consulting, and other appointment-driven businesses.
-- AI No-Show Risk Prediction — FastAPI ML model scores bookings to prioritize reminders and reduce revenue loss.
-- RAG-Assisted Conversational AI — integrated knowledge store (ChromaDB) + Gemini API for contextual assistant experiences.
-- Real-time Hubs & Notifications — SignalR-based live updates for admins, staff, and customers.
-- Admin Portal & RBAC — manage staff, services, schedules, and business configuration across tenants.
-
-## 📦 Getting Started (Dockerized)
-
-### Prerequisites
-
-- Docker Desktop (Windows / macOS / Linux)
-- Optional: `docker-compose` (included with Docker Desktop)
-
-### Quickstart
-
-From the repository root:
-
-```bash
-docker compose up --build
-```
-
-This will build and start services:
-
-- `sqlserver` — Microsoft SQL Server
-- `ai_service` — Python FastAPI AI service (port 8000)
-- `webapi` — .NET 9 API (port 5000)
-- `frontend` — Next.js frontend (port 3000)
-
-Wait for health checks to succeed (compose uses `service_healthy` dependencies).
-
-### Health endpoints
-
-- Frontend: `http://localhost:3000/` (UI)
-- API ready: `http://localhost:5000/readyz` or `http://localhost:5000/healthz`
-- AI service ready: `http://localhost:8000/readyz`
-
-If a container fails to start (example: SQL Server), inspect logs:
-
-```powershell
-docker-compose logs -f sqlserver
-docker logs bookflow_sqlserver --tail 200
-```
-
-## 🖼️ Screenshots
-
-Add screenshots in the `screenshots/` folder. Suggested images:
-
-- `screenshots/landing.png` — Landing page with service filters
-- `screenshots/admin.png` — Admin dashboard
-- `screenshots/staff.png` — Staff schedule view
-- `screenshots/chat.png` — AI assistant widget
-
-## 🛠️ Development Notes
-
-- Frontend: `frontend/` (Next.js 16, React 19, Tailwind)
-- API: `BookFlowAI.Api/` (.NET 9 Web API)
-- Application layer: `BookFlowAI.Application/`
-- Domain models: `BookFlowAI.Domain/`
-- Infrastructure & EF: `BookFlowAI.Infrastructure/`
-- AI service: `ai_service/` (FastAPI + `no_show_model_v2.joblib`)
-
-### Local frontend quick dev
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-## ✅ Production Checklist
-
-- Replace dev secrets (JWT_SECRET, GEMINI_API_KEY) with secure secrets in environment or vault.
-- Configure SQL Server backups and migrations (EF Core migrations).
-- Harden CORS, rate limits, and authentication flows.
-- Add CI/CD to build images, run tests, and deploy to staging.
-
-## 🙌 Contributing
-
-Contributions welcome — please open issues or PRs for features, UI polish, and production hardening.
-
-## License
-
-Add your license file here (e.g., `LICENSE.md`) or state your company policy.
-
 # BookFlowAI
 
-BookFlowAI is a full-stack SaaS-style booking and AI operations platform built as a production-ready portfolio project. It combines a .NET 9 clean-architecture backend, a Python FastAPI AI microservice, and a modern Next.js frontend to deliver a real booking flow with AI no-show risk prediction, RAG-powered support, and live administrative operations.
+BookFlowAI is a full-stack booking platform for appointment-driven businesses. It combines an ASP.NET Core API, a Next.js frontend, SQL Server, and a Python AI service for no-show prediction and retrieval-augmented chat.
 
-## System architecture
+> This repository is a portfolio and development project. The default credentials and secrets are intended for local use only and must be replaced before deployment.
+
+## What it includes
+
+- Customer registration, authentication, and booking management
+- Configurable business categories, services, staff, and schedules
+- Staff availability, time-off, and booking workflows
+- Admin dashboards, booking overrides, analytics, and knowledge management
+- JWT access tokens and server-side refresh-token rotation
+- Live booking updates over SignalR
+- Random Forest no-show risk prediction
+- ChromaDB-backed knowledge retrieval with optional Gemini responses
+- Docker Compose health checks, dependency ordering, and persistent volumes
+
+## Screenshots
+
+| Customer experience | Admin operations | Staff workspace |
+| --- | --- | --- |
+| ![BookFlowAI customer experience](image/README/1789117854846.png) | ![BookFlowAI admin operations](image/README/1789117861391.png) | ![BookFlowAI staff workspace](image/README/1789117868238.png) |
+
+## Architecture
 
 ```mermaid
 flowchart LR
-    User[Customer / Admin / Staff] --> FE[Next.js Frontend\nPort 3000]
-    FE --> API[ASP.NET Core Web API\nPort 5000]
-    API --> DB[(SQL Server\nBookFlowDb)]
-    API --> AI[FastAPI AI Service\nPort 8000]
-    AI --> RAG[(ChromaDB\nVector Knowledge Base)]
-    AI --> ML[RandomForest No-Show Model]
-    API --> HUB[SignalR Hub\n/hubs/bookings]
-    FE --> HUB
+    Browser[Browser] -->|HTTP| Frontend[Next.js 16<br/>Port 3000]
+    Frontend -->|REST + JWT| API[ASP.NET Core 9 API<br/>Host port 5000]
+    Frontend <-->|SignalR| API
+    API -->|EF Core| SQL[(SQL Server 2022<br/>Port 1433)]
+    API -->|Internal REST| AI[FastAPI AI service<br/>Port 8000]
+    AI --> ML[Random Forest model]
+    AI --> Chroma[(ChromaDB)]
+    AI -. optional .-> Gemini[Gemini API]
 ```
 
-## Product overview
+The browser communicates with the ASP.NET Core API. The API owns authentication, application workflows, persistence, and the public AI endpoints; the Python service is an internal inference and retrieval component.
 
-BookFlowAI is designed for service-driven businesses such as salons, gyms, wellness centers, and clinics. The platform combines operational and customer-facing workflows into one SaaS-style experience:
+## Technology stack
 
-- Customer booking with service, staff, and time-slot selection
-- AI no-show risk scoring before confirmation
-- Admin dashboard with live booking activity and operational KPIs
-- Role-based access for customers, staff, and administrators
-- Realtime updates through SignalR for booking status changes
-- Microservice-based AI layer with ML inference and chatbot context retrieval
+| Area | Technology |
+| --- | --- |
+| Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS, TanStack Query |
+| Backend | .NET 9, ASP.NET Core, EF Core 9, SignalR, Serilog |
+| AI service | Python 3.10, FastAPI, scikit-learn, ChromaDB, Gemini |
+| Database | SQL Server 2022 |
+| Runtime | Docker Compose |
 
-## Solution structure
+## Repository layout
 
-- BookFlowAI.Api — ASP.NET Core Web API and SignalR hub
-- BookFlowAI.Application — DTOs, interfaces, and service contracts
-- BookFlowAI.Domain — domain entities and business rules
-- BookFlowAI.Infrastructure — EF Core persistence, JWT setup, and AI gateway client
-- ai_service — FastAPI service with ML and RAG logic
-- frontend — Next.js app with App Router and modern TypeScript UI
-
-## Local development prerequisites
-
-- Docker Desktop or Docker Engine
-- .NET 9 SDK
-- Node.js 20+
-- Optional: Gemini API key for enhanced AI response generation
-
-## Configuration
-
-Set environment variables as needed before running the project:
-
-```bash
-export GEMINI_API_KEY="your_key_here"
-export JWT_SECRET="super-secret-key-please-change-this-now-12345"
+```text
+BookFlowAI.Api/             HTTP API, authentication pipeline, controllers, SignalR hub
+BookFlowAI.Application/     DTOs, interfaces, and application contracts
+BookFlowAI.Domain/          Domain entities
+BookFlowAI.Infrastructure/  EF Core, migrations, authentication, and service clients
+ai_service/                 FastAPI, ML inference, and RAG implementation
+frontend/                   Next.js application and frontend tests
+Dockerfile.api              Multi-stage .NET API image
+docker-compose.yml          Local multi-container environment
 ```
 
-## Run with Docker Compose
+## Run the complete stack
 
-From the project root:
+### Prerequisites
 
-```bash
-docker compose up --build
+- Docker Desktop or Docker Engine with Compose v2
+- At least 4 GB of memory available to Docker; SQL Server is the largest consumer
+- A Gemini API key only if generated AI responses are required
+
+### 1. Configure local environment variables
+
+Create or update `.env` in the repository root:
+
+```dotenv
+GEMINI_API_KEY=your-gemini-api-key
+JWT_SECRET=replace-with-a-long-random-development-secret
 ```
 
-The stack includes:
+The AI service can still start without a Gemini key, but generative responses may use its fallback behavior.
 
-- Frontend: http://localhost:3000
-- API Swagger: http://localhost:5000/Swagger
-- AI service docs: http://localhost:8000/docs
-- Health endpoint: http://localhost:5000/healthz
-- AI health endpoint: http://localhost:8000/healthz
-
-## Run services individually
-
-### 1. Backend
+### 2. Build and start
 
 ```bash
+docker compose up -d --build
+docker compose ps
+```
+
+Compose starts services in this order:
+
+```text
+SQL Server ─┐
+            ├─ healthy ─> Web API ─ healthy ─> Frontend
+AI service ─┘
+```
+
+First startup can take several minutes while SQL Server initializes and npm populates the frontend dependency volume.
+
+### 3. Open the applications
+
+| Service | URL |
+| --- | --- |
+| Frontend | <http://localhost:3000> |
+| API Swagger UI | <http://localhost:5000/swagger> |
+| API health | <http://localhost:5000/healthz> |
+| API readiness | <http://localhost:5000/readyz> |
+| AI Swagger UI | <http://localhost:8000/docs> |
+| AI health | <http://localhost:8000/healthz> |
+| SQL Server | `localhost,1433` |
+
+### Development accounts
+
+The startup seeder creates these local-only accounts:
+
+| Role | Email | Password |
+| --- | --- | --- |
+| Admin | `admin@bookflow.com` | `Admin@123456` |
+| Customer | `customer@bookflow.com` | `Customer@123` |
+
+## Common Docker commands
+
+```bash
+# Follow logs from the application-facing services
+docker compose logs -f webapi frontend ai_service
+
+# Rebuild only the API
+docker compose up -d --build webapi
+
+# Stop containers while preserving named volumes
+docker compose down
+
+# Show container and health status
+docker compose ps -a
+```
+
+### Completely clean rebuild
+
+Use this when migrations or cached frontend dependencies are out of sync:
+
+```bash
+docker compose down -v --remove-orphans
+docker compose build --no-cache
+docker compose up -d
+docker compose ps
+docker compose logs -f webapi frontend
+```
+
+> **Data-loss warning:** `docker compose down -v` deletes every Compose-managed named volume, including the SQL Server database, frontend dependencies, and ASP.NET Core data-protection keys.
+
+## Run services locally
+
+Docker Compose is the simplest supported workflow. For faster application development, start infrastructure in Docker and run the API or frontend on the host.
+
+### ASP.NET Core API
+
+Requires the .NET 9 SDK and SQL Server on `localhost:1433`.
+
+```bash
+docker compose up -d sqlserver ai_service
 dotnet restore
-cd BookFlowAI.Api
-dotnet run
 ```
 
-### 2. Frontend
+When the API runs on the host, set `AiService__BaseUrl=http://localhost:8000` so AI requests do not use Docker's internal `ai_service` hostname. In PowerShell:
+
+```powershell
+$env:AiService__BaseUrl = "http://localhost:8000"
+dotnet run --project BookFlowAI.Api
+```
+
+In Bash:
+
+```bash
+AiService__BaseUrl=http://localhost:8000 dotnet run --project BookFlowAI.Api
+```
+
+The default local API URL is <http://localhost:5185>; Swagger is available at <http://localhost:5185/swagger> in Development.
+
+### Next.js frontend
+
+Requires Node.js 20 or newer.
 
 ```bash
 cd frontend
@@ -203,97 +186,120 @@ npm install
 npm run dev
 ```
 
-### 3. AI microservice
+For the same API-gateway routing used by Compose, create `frontend/.env.local`:
+
+```dotenv
+NEXT_PUBLIC_API_URL=http://localhost:5000/api
+NEXT_PUBLIC_SIGNALR_URL=http://localhost:5000/hubs/bookings
+NEXT_PUBLIC_AI_API_URL=http://localhost:5000/api
+```
+
+Without overrides, REST and SignalR use the API on port `5000`, while the frontend AI client uses the FastAPI service on port `8000` directly.
+
+### FastAPI AI service
+
+Requires Python 3.10. On Windows PowerShell, activate the environment with `.venv\Scripts\Activate.ps1`; on Linux or macOS, use `source .venv/bin/activate`.
 
 ```bash
 cd ai_service
 python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-## API summary
+## API overview
 
-### Auth and account endpoints
+Swagger is the authoritative interactive API reference. The main route groups are:
 
-- POST /api/auth/register
-- POST /api/auth/login
-- POST /api/auth/refresh-token
-- POST /api/auth/revoke-token
-- POST /api/auth/logout
-- GET /api/account/me
+| Area | Routes |
+| --- | --- |
+| Authentication | `/api/auth/*`, `/api/account/*` |
+| Bookings | `/api/bookings/*` |
+| Catalog | `/api/business-categories/*`, `/api/services/*` |
+| Staff | `/api/staff/*`, `/api/admin/staff/*` |
+| Administration | `/api/admin/*` |
+| Analytics | `/api/analytics/*` |
+| Reviews | `/api/reviews/*` |
+| AI gateway | `/api/ai/chat`, `/api/ai/chat/predict-no-show` |
+| SignalR | `/hubs/bookings` |
 
-### Service and staff endpoints
+The internal FastAPI service exposes `/predict-no-show`, `/chat`, and `/ingest-business-data`. Browser clients should use the ASP.NET Core gateway rather than calling these internal routes directly.
 
-- GET /api/services
-- GET /api/services/{id}
-- GET /api/staff
-- GET /api/staff/{id}/availability
-- GET /api/staff/my-bookings
+## Database migrations
 
-### Booking endpoints
+The API applies pending EF Core migrations and seeds development data during startup. Create schema changes from the repository root:
 
-- POST /api/bookings
-- GET /api/bookings/my-bookings
-- GET /api/bookings/{id}
-- PUT /api/bookings/{id}/cancel
-- PUT /api/bookings/{id}/confirm
-- PUT /api/bookings/{id}/complete
-- PUT /api/bookings/{id}/mark-no-show
+```bash
+dotnet ef migrations add YourMigrationName \
+  --project BookFlowAI.Infrastructure/BookFlowAI.Infrastructure.csproj \
+  --startup-project BookFlowAI.Api/BookFlowAI.Api.csproj \
+  --output-dir Persistence/Migrations
+```
 
-### AI and analytics endpoints
+Check for model drift before committing:
 
-- POST /api/ai/chat
-- POST /api/ai/predict-no-show
-- GET /api/analytics/summary
-- GET /api/admin/dashboard/summary
-- GET /api/admin/bookings/live
-- PUT /api/admin/bookings/{id}/override
-- GET /healthz
-- GET /readyz
+```bash
+dotnet ef migrations has-pending-model-changes \
+  --project BookFlowAI.Infrastructure/BookFlowAI.Infrastructure.csproj \
+  --startup-project BookFlowAI.Api/BookFlowAI.Api.csproj
+```
 
-## Realtime signaling
+## Tests and build checks
 
-SignalR hub:
+```bash
+# Backend compilation
+dotnet build BookFlowAI.sln
 
-- /hubs/bookings
-- Events: ReceiveNewBooking, ReceiveBookingUpdate, BookingStatusUpdated
+# Frontend unit tests
+cd frontend
+npm test
 
-## AI and ML details
+# Frontend production build
+npm run build
+```
 
-Model type: RandomForestClassifier
+## Troubleshooting
 
-- Probability score range: 0.0 to 1.0
-- Risk classification thresholds:
-  - > = 0.60: High Risk
-  - > = 0.30: Medium Risk
-  - < 0.30: Low Risk
-- Fallback logic is activated automatically when the AI service is unavailable or returns an unexpected response
+### API exits or reports exit code 139
 
-## Deployment workflow
+Exit codes alone can be misleading. Inspect the managed application logs first:
 
-1. Build and start all services with Docker Compose.
-2. Confirm health checks are passing for SQL Server, API, and AI service.
-3. Open the frontend and authenticate through the login or register flow.
-4. Use the protected customer route, admin dashboard, and service booking flow.
-5. Monitor live booking updates via the SignalR hub and AI prediction responses through the API gateway.
+```bash
+docker compose logs --tail=200 webapi
+docker inspect bookflow_api --format '{{.State.ExitCode}} {{.State.OOMKilled}} {{.State.Error}}'
+```
 
-## Security notes
+Common causes in this project are pending EF Core model changes, an unavailable SQL database, or stale images. Confirm that EF reports no pending changes, then perform a clean rebuild if disposable local data can be removed.
 
-- JWT access tokens are validated in ASP.NET Core middleware
-- Refresh tokens are managed server-side with rotation support
-- The frontend stores auth tokens in localStorage and attaches them to outgoing authenticated requests
-- The frontend never calls the Python AI service directly; all AI requests are routed through the ASP.NET API gateway
+### Frontend remains in `npm install`
 
-## Production roadmap
+The Compose setup stores `/app/node_modules` in a named volume. If that cache was created from an older manifest, use the completely clean rebuild sequence above. Remember that `down -v` also removes SQL data.
 
-- Add tenant-aware auth and extended RBAC rules
-- Add advanced analytics exports and reporting
-- Add OpenTelemetry tracing with structured logs and dashboards
-- Add request-correlation middleware for debugging and auditing
-- Harden secrets management with Azure Key Vault or equivalent secret services
+### A port is already allocated
 
-## License
+Find and stop the process or container using ports `3000`, `5000`, `8000`, or `1433`, or change the published port on the left side of the relevant Compose mapping.
 
-This project is intended for portfolio/demo purposes and can be adapted into a broader production SaaS offering.
+### Check individual health probes
+
+```bash
+curl http://localhost:5000/healthz
+curl http://localhost:8000/readyz
+docker compose ps
+```
+
+## Production considerations
+
+Before deploying outside a local development environment:
+
+- Move SQL, JWT, and Gemini secrets to a secret manager
+- Replace the default SQL administrator password and seeded user credentials
+- Run migrations as a controlled deployment step
+- Configure HTTPS, restrictive CORS origins, and secure token storage
+- Persist and back up SQL Server and ChromaDB data intentionally
+- Add rate limiting, request correlation, distributed tracing, and centralized logs
+- Build immutable frontend and AI images instead of using development bind mounts
+- Add CI checks for backend builds, frontend tests, migrations, and container images
+
+## Contributing
+
+Create a focused branch, include tests where practical, and verify `dotnet build`, `npm test`, and `docker compose config` before opening a pull request.
