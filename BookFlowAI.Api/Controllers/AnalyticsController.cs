@@ -45,18 +45,38 @@ namespace BookFlowAI.Api.Controllers
         [HttpGet("services-performance")]
         public async Task<ActionResult<IEnumerable<ServicePerformanceDto>>> GetServicesPerformance()
         {
-            var performance = await _context.Bookings
-                // group by service properties directly so EF Core can translate to SQL
-                .GroupBy(b => new { b.ServiceId, b.Service.Name, b.Service.Price })
-                .Select(g => new ServicePerformanceDto(
+            // Flatten the navigation properties before grouping and calculate revenue
+            // with a conditional SUM. EF Core translates this shape to SUM(CASE ...),
+            // whereas multiplying a filtered Count by the grouped price is not
+            // translatable by the SQL Server provider.
+            var rows = await _context.Bookings
+                .AsNoTracking()
+                .Select(b => new
+                {
+                    b.ServiceId,
+                    ServiceName = b.Service.Name,
+                    b.Service.Price,
+                    b.Status
+                })
+                .GroupBy(b => new { b.ServiceId, b.ServiceName, b.Price })
+                .Select(g => new
+                {
                     g.Key.ServiceId,
-                    g.Key.Name,
-                    g.Count(),
-                    // compute revenue as number of completed/confirmed bookings times service price
-                    g.Where(b => b.Status == "Completed" || b.Status == "Confirmed").Count() * g.Key.Price
-                ))
+                    g.Key.ServiceName,
+                    TotalBookings = g.Count(),
+                    TotalRevenueGenerated = g.Sum(b =>
+                        b.Status == "Completed" || b.Status == "Confirmed"
+                            ? b.Price
+                            : 0m)
+                })
                 .OrderByDescending(p => p.TotalBookings)
                 .ToListAsync();
+
+            var performance = rows.Select(row => new ServicePerformanceDto(
+                row.ServiceId,
+                row.ServiceName,
+                row.TotalBookings,
+                row.TotalRevenueGenerated));
 
             return Ok(performance);
         }

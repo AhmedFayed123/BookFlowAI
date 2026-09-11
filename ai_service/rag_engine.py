@@ -1,4 +1,5 @@
 import os
+import asyncio
 import logging
 import chromadb
 import google.generativeai as genai
@@ -8,6 +9,9 @@ from schemas import (
 )
 
 logger = logging.getLogger("BookFlowAI.RAGEngine")
+
+RAG_QUERY_TIMEOUT_SECONDS = 5
+GEMINI_TIMEOUT_SECONDS = 15
 
 # تهيئة ChromaDB للتخزين الدائم
 chroma_client = chromadb.PersistentClient(path="./chroma_db")
@@ -61,13 +65,19 @@ async def generate_chat_response(req: ChatRequest) -> ChatResponse:
 
     try:
         # 1. البحث الدلالي داخل Vector DB مع الفلترة بـ business_id
-        results = collection.query(
-            query_texts=[req.message],
-            n_results=3,
-            where={"business_id": req.business_id}
-        )
+        retrieved_docs = []
+        if collection.count() > 0:
+            results = await asyncio.wait_for(
+                asyncio.to_thread(
+                    collection.query,
+                    query_texts=[req.message],
+                    n_results=3,
+                    where={"business_id": req.business_id},
+                ),
+                timeout=RAG_QUERY_TIMEOUT_SECONDS,
+            )
+            retrieved_docs = results.get("documents", [[]])[0]
 
-        retrieved_docs = results.get("documents", [[]])[0]
         if retrieved_docs:
             context_text = "\n".join(retrieved_docs)
             source_used = True
@@ -101,7 +111,13 @@ async def generate_chat_response(req: ChatRequest) -> ChatResponse:
         # 4. الاستدعاء الحقيقي للـ Gemini API
         if GEMINI_API_KEY:
             model = genai.GenerativeModel("gemini-1.5-flash")
-            response = await model.generate_content_async(system_prompt)
+            response = await asyncio.wait_for(
+                model.generate_content_async(
+                    system_prompt,
+                    request_options={"timeout": GEMINI_TIMEOUT_SECONDS},
+                ),
+                timeout=GEMINI_TIMEOUT_SECONDS,
+            )
             reply = response.text.strip()
             return ChatResponse(
                 reply=reply,
@@ -114,12 +130,28 @@ async def generate_chat_response(req: ChatRequest) -> ChatResponse:
         logger.error(f"خطأ أثناء توليد رد الـ AI: {e}")
 
     # Fallback Response
-    fallback_reply = (
-        f"أهلاً بك! رداً على استفسارك: {context_text}\n\n"
-        "يسعدنا خدمتك دائماً ويمكنك الاستفسار أو الحجز مباشرة عبر التطبيق."
-        if source_used else
-        "أهلاً بك في BookFlowAI! يسعدنا خدمتك ويمكنك الاطلاع على كافة الخدمات والمواعيد المتاحة والحجز عبر التطبيق."
-    )
+    normalized_message = req.message.casefold()
+    booking_question = any(keyword in normalized_message for keyword in (
+        "book", "booking", "appointment", "reserve",
+        "احجز", "حجز", "موعد", "ميعاد",
+    ))
+
+    if booking_question:
+        fallback_reply = (
+            "To book an appointment: choose a service from the home page, select an available provider and time, "
+            "then review and confirm your booking. You can manage it later from My Bookings."
+            if req.message.isascii() else
+            "للحجز: اختر الخدمة من الصفحة الرئيسية، ثم اختر مقدم الخدمة والموعد المتاح، وبعدها راجع البيانات وأكد الحجز. "
+            "يمكنك متابعة الحجز أو تعديله لاحقًا من صفحة حجوزاتي."
+        )
+    elif source_used:
+        fallback_reply = f"المعلومات المتاحة ذات الصلة بسؤالك:\n{context_text}"
+    else:
+        fallback_reply = (
+            "I can help with available services, booking steps, appointments, staff availability, and cancellation questions."
+            if req.message.isascii() else
+            "يمكنني مساعدتك في الخدمات المتاحة، خطوات الحجز، المواعيد، توفر مقدمي الخدمة، وسياسة الإلغاء."
+        )
 
     return ChatResponse(
         reply=fallback_reply,

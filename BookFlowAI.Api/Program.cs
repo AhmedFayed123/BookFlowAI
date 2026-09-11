@@ -42,6 +42,7 @@ namespace BookFlowAI.Api
                     client.BaseAddress = new Uri(
                         builder.Configuration["AiService:BaseUrl"]
                         ?? "http://ai_service:8000");
+                    client.Timeout = TimeSpan.FromSeconds(20);
                 });
 
 
