@@ -4,6 +4,7 @@ using BookFlowAI.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace BookFlowAI.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260911093224_GeneralizeServicePlatform")]
+    partial class GeneralizeServicePlatform
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -283,46 +286,6 @@ namespace BookFlowAI.Infrastructure.Persistence.Migrations
                     b.ToTable("StaffServices");
                 });
 
-            modelBuilder.Entity("BookFlowAI.Domain.Entities.StaffTimeOffRequest", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("AdminComment")
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<DateTime>("Date")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("Reason")
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
-
-                    b.Property<DateTime?>("ReviewedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int>("StaffId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("nvarchar(20)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("StaffId", "Date", "Status");
-
-                    b.ToTable("StaffTimeOffRequests");
-                });
-
             modelBuilder.Entity("BookFlowAI.Domain.Entities.User", b =>
                 {
                     b.Property<int>("Id")
@@ -459,17 +422,6 @@ namespace BookFlowAI.Infrastructure.Persistence.Migrations
                     b.Navigation("Staff");
                 });
 
-            modelBuilder.Entity("BookFlowAI.Domain.Entities.StaffTimeOffRequest", b =>
-                {
-                    b.HasOne("BookFlowAI.Domain.Entities.StaffMember", "Staff")
-                        .WithMany("TimeOffRequests")
-                        .HasForeignKey("StaffId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Staff");
-                });
-
             modelBuilder.Entity("BookFlowAI.Domain.Entities.Booking", b =>
                 {
                     b.Navigation("Review");
@@ -494,8 +446,6 @@ namespace BookFlowAI.Infrastructure.Persistence.Migrations
                     b.Navigation("Schedules");
 
                     b.Navigation("StaffServices");
-
-                    b.Navigation("TimeOffRequests");
                 });
 
             modelBuilder.Entity("BookFlowAI.Domain.Entities.User", b =>

@@ -2,10 +2,10 @@ services:
   sqlserver:
     image: mcr.microsoft.com/mssql/server:2022-latest
     container_name: bookflow_sqlserver
-    user: "0:0"
     environment:
       - ACCEPT_EULA=Y
       - MSSQL_SA_PASSWORD=YourStrongPassword123!
+      - MSSQL_PID=Developer
     ports:
       - "1433:1433"
     volumes:
@@ -14,12 +14,12 @@ services:
       test:
         [
           "CMD-SHELL",
-          '/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "YourStrongPassword123!" -C -Q "SELECT 1" || /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P "YourStrongPassword123!" -Q "SELECT 1"',
+          '/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$$MSSQL_SA_PASSWORD" -C -Q "SELECT 1" -b || /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P "$$MSSQL_SA_PASSWORD" -C -Q "SELECT 1" -b',
         ]
-      interval: 15s
-      timeout: 10s
-      retries: 10
-      start_period: 30s
+      interval: 20s
+      timeout: 15s
+      retries: 12
+      start_period: 40s
     networks:
       - bookflow-network
 
@@ -73,7 +73,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "curl -fsS http://localhost:8080/readyz || curl -fsS http://localhost:8080/healthz",
+          "bash -c 'exec 3<>/dev/tcp/localhost/8080'",
         ]
       interval: 20s
       timeout: 10s
@@ -88,7 +88,8 @@ services:
     working_dir: /app
     volumes:
       - ./frontend:/app
-    command: sh -c "npm install && npm run dev"
+      - frontend_node_modules:/app/node_modules
+    command: sh -c "npm ci --no-audit --no-fund && npm run dev"
     ports:
       - "3000:3000"
     environment:
@@ -103,6 +104,7 @@ services:
 
 volumes:
   sqlserver_data:
+  frontend_node_modules:
 
 networks:
   bookflow-network:

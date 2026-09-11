@@ -51,12 +51,14 @@ namespace BookFlowAI.Api
 
             builder.Services.AddCors(options =>
             {
-                options.AddPolicy("AllowAll", policy =>
+                options.AddPolicy("Frontend", policy =>
                 {
-                    policy.AllowAnyHeader()
-                          .AllowAnyMethod()
-                          .SetIsOriginAllowed(_ => true)
-                          .AllowCredentials();
+                    var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
+                        ?? new[] { "http://localhost:3000" };
+                    policy.WithOrigins(allowedOrigins)
+                        .AllowAnyHeader()
+                        .AllowAnyMethod()
+                        .AllowCredentials();
                 });
             });
 
@@ -162,7 +164,7 @@ namespace BookFlowAI.Api
             // CORS
             // =========================================================
 
-            app.UseCors("AllowAll");
+            app.UseCors("Frontend");
 
 
             // =========================================================
@@ -201,9 +203,22 @@ namespace BookFlowAI.Api
                         .GetRequiredService<
                             BookFlowAI.Infrastructure.ApplicationDbContext>();
 
-                await BookFlowAI.Infrastructure.Persistence
-                    .DbInitializer
-                    .SeedAsync(dbContext);
+                try
+                {
+                    await BookFlowAI.Infrastructure.Persistence
+                        .DbInitializer
+                        .SeedAsync(dbContext);
+                }
+                catch (Exception ex)
+                {
+                    var logger = scope.ServiceProvider
+                        .GetRequiredService<ILogger<Program>>();
+
+                    logger.LogError(ex,
+                        "Database initialization failed during application startup.");
+
+                    throw;
+                }
             }
 
 

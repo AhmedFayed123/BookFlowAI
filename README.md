@@ -63,7 +63,7 @@ docker compose up --build
 The stack includes:
 
 - Frontend: http://localhost:3000
-- API Swagger: http://localhost:5000/swagger
+- API Swagger: ![1789117868238](image/README/1789117868238.png)
 - AI service docs: http://localhost:8000/docs
 - Health endpoint: http://localhost:5000/healthz
 - AI health endpoint: http://localhost:8000/healthz

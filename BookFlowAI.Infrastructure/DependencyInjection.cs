@@ -50,6 +50,17 @@ namespace BookFlowAI.Infrastructure
                     ValidateLifetime = true,
                     ClockSkew = TimeSpan.Zero
                 };
+                options.Events = new JwtBearerEvents
+                {
+                    OnMessageReceived = context =>
+                    {
+                        var accessToken = context.Request.Query["access_token"];
+                        if (!string.IsNullOrEmpty(accessToken)
+                            && context.HttpContext.Request.Path.StartsWithSegments("/hubs/bookings"))
+                            context.Token = accessToken;
+                        return Task.CompletedTask;
+                    }
+                };
             });
 
             return services;

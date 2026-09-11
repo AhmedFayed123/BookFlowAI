@@ -21,7 +21,9 @@ namespace BookFlowAI.Api.Controllers
         public async Task<ActionResult<IEnumerable<BusinessInfoDto>>> GetInfo()
         {
             var infoList = await _context.BusinessInfos
-                .Select(b => new BusinessInfoDto(b.Id, b.Content))
+                .AsNoTracking()
+                .OrderBy(b => b.Category)
+                .Select(b => new BusinessInfoDto(b.Id, b.Category, b.Content))
                 .ToListAsync();
 
             return Ok(infoList);

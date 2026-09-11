@@ -1,15 +1,18 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   bookingsApi,
   type BookingDetailDto,
+  type BookingNotification,
   type BookingStatusUpdate,
 } from "../../../lib/api";
 import { useSignalR } from "../../../hooks/useSignalR";
 import DashboardSummaryCards from "../../../components/dashboard/DashboardSummaryCards";
 import BookingsTable from "../../../components/dashboard/BookingsTable";
 import AnalyticsPanel from "../../../components/dashboard/AnalyticsPanel";
+import ProtectedRoute from "../../../components/auth/ProtectedRoute";
 
 const api = {
   bookings: {
@@ -18,9 +21,6 @@ const api = {
     updateStatus: bookingsApi.updateStatus,
   },
 };
-
-const isNewBooking = (booking: BookingDetailDto) =>
-  booking.status === "Pending" || booking.status === "Confirmed";
 
 export default function AdminDashboardPage() {
   const [bookings, setBookings] = useState<BookingDetailDto[]>([]);
@@ -107,6 +107,13 @@ export default function AdminDashboardPage() {
         const result = await api.bookings.getAll();
         if (!isMounted) return;
         setBookings(result);
+      } catch (error) {
+        if (!isMounted) return;
+        setNotice(
+          error instanceof Error
+            ? error.message
+            : "Could not load the booking dashboard.",
+        );
       } finally {
         if (isMounted) {
           setLoading(false);
@@ -121,28 +128,18 @@ export default function AdminDashboardPage() {
     };
   }, []);
 
-  const handleSignalRNewBooking = (payload: {
-    bookingId?: number;
-    serviceName?: string;
-    status?: string;
-    message?: string;
-    customerId?: number;
-    staffId?: number;
-    noShowProbability?: number | null;
-    dateTime?: string;
-    staffName?: string;
-  }) => {
+  const handleSignalRNewBooking = (payload: BookingNotification) => {
     if (!payload?.bookingId) return;
 
     const incomingBooking: BookingDetailDto = {
       id: payload.bookingId,
-      serviceId: 0,
+      serviceId: payload.serviceId ?? 0,
       serviceName: payload.serviceName ?? "New Service",
       staffId: payload.staffId ?? 0,
       staffName: payload.staffName ?? "Assigned Staff",
       dateTime: payload.dateTime ?? new Date().toISOString(),
-      durationInMinutes: 30,
-      price: 0,
+      durationInMinutes: payload.durationInMinutes ?? 0,
+      price: payload.price ?? 0,
       status: (payload.status as BookingDetailDto["status"]) ?? "Pending",
       noShowProbability: payload.noShowProbability ?? 0,
     };
@@ -231,7 +228,7 @@ export default function AdminDashboardPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 px-4 py-6 md:px-8">
+    <ProtectedRoute requiredRole="Admin"><div className="min-h-screen bg-slate-100 px-4 py-6 md:px-8">
       <div className="mx-auto max-w-7xl space-y-6">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
@@ -244,6 +241,9 @@ export default function AdminDashboardPage() {
           </div>
 
           <div className="flex items-center gap-3">
+            <Link href="/admin/staff" className="rounded-full border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-semibold text-violet-700">
+              Manage staff
+            </Link>
             <button
               type="button"
               onClick={() => setIsMuted((value) => !value)}
@@ -295,6 +295,6 @@ export default function AdminDashboardPage() {
           />
         )}
       </div>
-    </div>
+    </div></ProtectedRoute>
   );
 }

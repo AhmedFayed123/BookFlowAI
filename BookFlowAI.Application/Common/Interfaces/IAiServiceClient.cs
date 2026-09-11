@@ -45,6 +45,22 @@
         bool IsFallback
     );
 
+    public record AiBusinessServiceItem(
+        string Name,
+        string Category,
+        decimal Price,
+        string Description,
+        int DurationMinutes
+    );
+
+    public record AiBusinessDataRequest(
+        int BusinessId,
+        string BusinessName,
+        string? BusinessCategory,
+        IReadOnlyCollection<AiBusinessServiceItem> Services,
+        string Policies
+    );
+
     // =========================================================================
     // Interface
     // =========================================================================
@@ -52,5 +68,6 @@
     {
         Task<AiPredictResponse?> PredictNoShowAsync(AiPredictRequest request);
         Task<AiChatClientResponse?> SendChatMessageAsync(AiChatClientRequest request);
+        Task<bool> IngestBusinessDataAsync(AiBusinessDataRequest request);
     }
 }

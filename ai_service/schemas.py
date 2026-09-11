@@ -136,7 +136,7 @@ class ChatRequest(BaseModel):
             "example": {
                 "business_id": 7,
                 "session_id": "b7-customer-1024",
-                "message": "هل يوجد لديكم خصم على خدمة الحلاقة؟",
+                "message": "ما الخدمات المتاحة وكيف يمكنني حجز موعد؟",
                 "conversation_history": [
                     {"role": "user", "content": "ما هي مواعيد العمل؟"},
                     {"role": "assistant", "content": "نعمل يوميًا من 10 صباحًا حتى 10 مساءً."},
@@ -165,7 +165,7 @@ class ChatResponse(BaseModel):
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
-                "reply": "نعم، لدينا خصم 15% على خدمة الحلاقة الرجالية أيام الأحد.",
+                "reply": "يمكنك اختيار الخدمة المناسبة ثم مقدم الخدمة والموعد المتاح.",
                 "session_id": "b7-customer-1024",
                 "source_used": True,
                 "is_fallback": False,
@@ -192,6 +192,7 @@ class ServiceItem(BaseModel):
     """بيانات خدمة واحدة تقدمها المنشأة"""
 
     name: str = Field(..., min_length=1, max_length=150, description="اسم الخدمة")
+    category: Optional[str] = Field(default=None, max_length=120, description="تصنيف النشاط الديناميكي")
     price: float = Field(..., ge=0, description="سعر الخدمة بالجنيه المصري")
     description: Optional[str] = Field(default=None, max_length=500, description="وصف مختصر للخدمة (اختياري)")
     duration_minutes: Optional[int] = Field(
@@ -206,10 +207,11 @@ class IngestBusinessDataRequest(BaseModel):
         json_schema_extra={
             "example": {
                 "business_id": 7,
-                "business_name": "صالون النخبة",
+                "business_name": "مركز الخدمات المتكاملة",
+                "business_category": "Consultation Services",
                 "services": [
-                    {"name": "قص شعر رجالي", "price": 80.0, "duration_minutes": 30},
-                    {"name": "حلاقة ذقن", "price": 40.0, "duration_minutes": 15},
+                    {"name": "استشارة مهنية", "category": "Professional Coaching", "price": 500.0, "duration_minutes": 60},
+                    {"name": "تقييم أولي", "category": "Consultation Services", "price": 250.0, "duration_minutes": 30},
                 ],
                 "policies": "يجب الحضور قبل الموعد بـ 10 دقائق. يُسمح بإلغاء الحجز حتى 24 ساعة قبل الموعد.",
             }
@@ -218,6 +220,7 @@ class IngestBusinessDataRequest(BaseModel):
 
     business_id: int = Field(..., gt=0, description="المعرف الفريد للمنشأة")
     business_name: Optional[str] = Field(default=None, max_length=200, description="اسم المنشأة (اختياري)")
+    business_category: Optional[str] = Field(default=None, max_length=120, description="تصنيف الصناعة أو النشاط")
     services: List[ServiceItem] = Field(default_factory=list, description="قائمة بخدمات المنشأة")
     policies: str = Field(default="", max_length=3000, description="سياسات المنشأة (الإلغاء، الحضور، الدفع...)")
 

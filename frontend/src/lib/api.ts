@@ -86,13 +86,25 @@ export interface UserProfileResponse {
 
 export interface ServiceDto {
     id: number;
+    businessCategoryId: number;
+    businessCategoryName: string;
     name: string;
     description: string;
     price: number;
     durationInMinutes: number;
+    isActive: boolean;
+}
+
+export interface BusinessCategoryDto {
+    id: number;
+    name: string;
+    slug: string;
+    description: string;
+    isActive: boolean;
 }
 
 export interface CreateServiceDto {
+    businessCategoryId: number;
     name: string;
     description: string;
     price: number;
@@ -100,6 +112,7 @@ export interface CreateServiceDto {
 }
 
 export interface UpdateServiceDto {
+    businessCategoryId: number;
     name: string;
     description: string;
     price: number;
@@ -116,10 +129,46 @@ export interface StaffProfileDto {
     specialties: string;
     workingHours: string;
     averageRating: number;
+    isAvailable: boolean;
+    services?: AdminStaffServiceDto[] | null;
 }
+
+export interface StaffShiftInputDto {
+    dayOfWeek: number;
+    startTime: string;
+    endTime: string;
+}
+
+export interface AdminStaffServiceDto { id: number; name: string }
+export interface AdminStaffShiftDto extends StaffShiftInputDto { id: number }
+export interface AdminStaffDto {
+    id: number;
+    userId: number;
+    name: string;
+    email: string;
+    phoneNumber?: string | null;
+    specialties?: string | null;
+    isAvailable: boolean;
+    services: AdminStaffServiceDto[];
+    shifts: AdminStaffShiftDto[];
+}
+
+export interface AdminCreateStaffDto {
+    name: string;
+    email: string;
+    password: string;
+    phoneNumber?: string | null;
+    specialties?: string | null;
+    isAvailable: boolean;
+    serviceIds: number[];
+    shifts: StaffShiftInputDto[];
+}
+
+export type AdminUpdateStaffDto = Omit<AdminCreateStaffDto, "password">;
 
 export interface BusinessInfoDto {
     id: number;
+    category: string;
     content: string;
 }
 
@@ -212,6 +261,18 @@ export interface RequestDayOffDto {
     reason?: string | null;
 }
 
+export interface AdminTimeOffRequestDto {
+    id: number;
+    staffId: number;
+    staffName: string;
+    date: string;
+    reason?: string | null;
+    status: "Pending" | "Approved" | "Rejected";
+    adminComment?: string | null;
+    createdAt: string;
+    reviewedAt?: string | null;
+}
+
 export interface AdminDashboardSummaryDto {
     todayBookingsCount: number;
     expectedRevenueToday: number;
@@ -253,6 +314,7 @@ export interface OverrideBookingDto {
 
 export interface UpdateBusinessAiDataDto {
     businessName: string;
+    industryCategory?: string | null;
     workingHoursInfo: string;
     policyInfo: string;
     servicesSummary: string;
@@ -304,7 +366,13 @@ export interface NotificationPayload {
 }
 
 export interface BookingNotification extends NotificationPayload {
+    customerId?: number | null;
+    customerName?: string;
+    serviceId?: number;
     serviceName?: string;
+    staffName?: string;
+    durationInMinutes?: number;
+    price?: number;
     status?: BookingStatus;
     dateTime?: string;
     noShowProbability?: number | null;
@@ -408,7 +476,7 @@ api.interceptors.response.use(
             clearAuthStorage();
 
             if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
-                window.location.assign("/login");
+                window.location.replace(new URL("/login", window.location.origin));
             }
         }
 
@@ -492,7 +560,7 @@ export const accountApi = {
 
 export const bookingsApi = {
     async getAll(params?: { status?: string; date?: string }): Promise<BookingDetailDto[]> {
-        const response = await api.get<BookingDetailDto[]>("/bookings", { params });
+        const response = await api.get<BookingDetailDto[]>("/admin/bookings", { params });
         return response.data;
     },
 
@@ -560,9 +628,16 @@ export const servicesApi = {
     },
 };
 
+export const businessCategoriesApi = {
+    async getAll(includeInactive = false): Promise<BusinessCategoryDto[]> {
+        const response = await api.get<BusinessCategoryDto[]>("/business-categories", { params: { includeInactive } });
+        return response.data;
+    },
+};
+
 export const staffApi = {
-    async getStaff(): Promise<StaffProfileDto[]> {
-        const response = await api.get<StaffProfileDto[]>("/staff");
+    async getStaff(serviceId?: number): Promise<StaffProfileDto[]> {
+        const response = await api.get<StaffProfileDto[]>("/staff", { params: serviceId ? { serviceId } : undefined });
         return response.data;
     },
 
@@ -654,6 +729,42 @@ export const adminApi = {
 
     async updateBusinessAiData(data: UpdateBusinessAiDataDto): Promise<{ message: string; updatedAt: string; data: UpdateBusinessAiDataDto }> {
         const response = await api.post<{ message: string; updatedAt: string; data: UpdateBusinessAiDataDto }>("/admin/ai/business-data", data);
+        return response.data;
+    },
+
+    async getStaff(): Promise<AdminStaffDto[]> {
+        const response = await api.get<AdminStaffDto[]>("/admin/staff");
+        return response.data;
+    },
+
+    async createStaff(data: AdminCreateStaffDto): Promise<AdminStaffDto> {
+        const response = await api.post<AdminStaffDto>("/admin/staff", data);
+        return response.data;
+    },
+
+    async updateStaff(id: number, data: AdminUpdateStaffDto): Promise<AdminStaffDto> {
+        const response = await api.put<AdminStaffDto>(`/admin/staff/${id}`, data);
+        return response.data;
+    },
+
+    async setStaffAvailability(id: number, isAvailable: boolean): Promise<void> {
+        await api.patch(`/admin/staff/${id}/availability`, { isAvailable });
+    },
+
+    async deleteStaff(id: number): Promise<void> {
+        await api.delete(`/admin/staff/${id}`);
+    },
+
+    async getTimeOffRequests(status = "Pending"): Promise<AdminTimeOffRequestDto[]> {
+        const response = await api.get<AdminTimeOffRequestDto[]>("/admin/staff/time-off-requests", { params: { status } });
+        return response.data;
+    },
+
+    async reviewTimeOffRequest(id: number, isApproved: boolean, adminComment?: string): Promise<{ message: string; affectedBookings: number }> {
+        const response = await api.patch<{ message: string; affectedBookings: number }>(`/admin/staff/time-off-requests/${id}`, {
+            isApproved,
+            adminComment: adminComment || null,
+        });
         return response.data;
     },
 };

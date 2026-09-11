@@ -17,10 +17,13 @@ namespace BookFlowAI.Infrastructure
         }
 
         public DbSet<User> Users => Set<User>();
+        public DbSet<BusinessCategory> BusinessCategories => Set<BusinessCategory>();
         public DbSet<Service> Services => Set<Service>();
         public DbSet<StaffMember> StaffMembers => Set<StaffMember>();
+        public DbSet<StaffService> StaffServices => Set<StaffService>();
         public DbSet<Booking> Bookings => Set<Booking>();
         public DbSet<StaffSchedule> StaffSchedules => Set<StaffSchedule>();
+        public DbSet<StaffTimeOffRequest> StaffTimeOffRequests => Set<StaffTimeOffRequest>();
         public DbSet<Review> Reviews => Set<Review>();
         public DbSet<BusinessInfo> BusinessInfos => Set<BusinessInfo>();
         public DbSet<RefreshToken> RefreshTokens { get; set; }
@@ -52,6 +55,56 @@ namespace BookFlowAI.Infrastructure
             modelBuilder.Entity<Service>()
                 .Property(s => s.Price)
                 .HasPrecision(18, 2);
+
+            modelBuilder.Entity<BusinessCategory>(entity =>
+            {
+                entity.HasIndex(category => category.Name).IsUnique();
+                entity.HasIndex(category => category.Slug).IsUnique();
+                entity.Property(category => category.Name).HasMaxLength(120);
+                entity.Property(category => category.Slug).HasMaxLength(140);
+                entity.Property(category => category.Description).HasMaxLength(500);
+            });
+
+            modelBuilder.Entity<Service>(entity =>
+            {
+                entity.Property(service => service.Name).HasMaxLength(160);
+                entity.Property(service => service.Description).HasMaxLength(1000);
+                entity.HasOne(service => service.BusinessCategory)
+                    .WithMany(category => category.Services)
+                    .HasForeignKey(service => service.BusinessCategoryId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<StaffService>(entity =>
+            {
+                entity.HasKey(assignment => new { assignment.StaffId, assignment.ServiceId });
+                entity.HasOne(assignment => assignment.Staff)
+                    .WithMany(staff => staff.StaffServices)
+                    .HasForeignKey(assignment => assignment.StaffId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(assignment => assignment.Service)
+                    .WithMany(service => service.StaffServices)
+                    .HasForeignKey(assignment => assignment.ServiceId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<StaffSchedule>()
+                .HasIndex(schedule => new { schedule.StaffId, schedule.DayOfWeek, schedule.StartTime, schedule.EndTime })
+                .IsUnique();
+
+            modelBuilder.Entity<StaffTimeOffRequest>(entity =>
+            {
+                entity.Property(request => request.Reason).HasMaxLength(500);
+                entity.Property(request => request.Status).HasMaxLength(20);
+                entity.Property(request => request.AdminComment).HasMaxLength(500);
+                entity.HasIndex(request => new { request.StaffId, request.Date, request.Status });
+                entity.HasOne(request => request.Staff)
+                    .WithMany(staff => staff.TimeOffRequests)
+                    .HasForeignKey(request => request.StaffId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<User>().HasIndex(user => user.Email).IsUnique();
 
             // RefreshToken Relationship
             modelBuilder.Entity<RefreshToken>(entity =>

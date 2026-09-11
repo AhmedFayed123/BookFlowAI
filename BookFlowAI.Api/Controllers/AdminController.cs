@@ -12,10 +12,12 @@ namespace BookFlowAI.Api.Controllers
     public class AdminController : ControllerBase
     {
         private readonly IApplicationDbContext _context;
+        private readonly IAiServiceClient _aiServiceClient;
 
-        public AdminController(IApplicationDbContext context)
+        public AdminController(IApplicationDbContext context, IAiServiceClient aiServiceClient)
         {
             _context = context;
+            _aiServiceClient = aiServiceClient;
         }
 
         // GET /api/admin/dashboard/summary
@@ -103,6 +105,7 @@ namespace BookFlowAI.Api.Controllers
                     ServiceId = b.ServiceId,
                     ServiceName = b.Service.Name,
                     Price = b.Service.Price,
+                    DurationInMinutes = b.Service.DurationInMinutes,
                     b.DateTime,
                     b.Status,
                     b.NoShowProbability
@@ -142,14 +145,46 @@ namespace BookFlowAI.Api.Controllers
 
         // POST /api/admin/ai/business-data
         [HttpPost("ai/business-data")]
-        public IActionResult UpdateBusinessAiData([FromBody] UpdateBusinessAiDataDto dto)
+        public async Task<IActionResult> UpdateBusinessAiData([FromBody] UpdateBusinessAiDataDto dto)
         {
-            // يُستخدم لتعديل سياق المعرفة الخاص بالشات بوت
+            var services = await _context.Services
+                .AsNoTracking()
+                .Where(service => service.IsActive)
+                .Select(service => new AiBusinessServiceItem(
+                    service.Name,
+                    service.BusinessCategory.Name,
+                    service.Price,
+                    service.Description,
+                    service.DurationInMinutes))
+                .ToListAsync();
+
+            var policies = string.Join(Environment.NewLine, new[]
+            {
+                dto.WorkingHoursInfo,
+                dto.PolicyInfo,
+                dto.CustomInstructions
+            }.Where(value => !string.IsNullOrWhiteSpace(value)));
+
+            var updated = await _aiServiceClient.IngestBusinessDataAsync(new AiBusinessDataRequest(
+                1, dto.BusinessName, dto.IndustryCategory, services, policies));
+            if (!updated)
+                return StatusCode(StatusCodes.Status503ServiceUnavailable,
+                    new { message = "AI knowledge service is temporarily unavailable." });
+
+            var businessInfo = await _context.BusinessInfos.FirstOrDefaultAsync(info => info.Category == "AIConfiguration");
+            var content = $"Business: {dto.BusinessName}\nIndustry: {dto.IndustryCategory}\nHours: {dto.WorkingHoursInfo}\nPolicies: {dto.PolicyInfo}\nInstructions: {dto.CustomInstructions}";
+            if (businessInfo is null)
+                _context.BusinessInfos.Add(new BookFlowAI.Domain.Entities.BusinessInfo { Category = "AIConfiguration", Content = content });
+            else
+                businessInfo.Content = content;
+            await _context.SaveChangesAsync();
+
             return Ok(new
             {
                 message = "تم تحديث بيانات المنشأة والمعلومات المرتبطة بالمساعد الذكي بنجاح.",
                 updatedAt = DateTime.Now,
-                data = dto
+                data = dto,
+                indexedServices = services.Count
             });
         }
     }

@@ -1,27 +1,55 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using System.Security.Claims;
+using BookFlowAI.Application.Common.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.EntityFrameworkCore;
 
-namespace BookFlowAI.Api.Hubs
+namespace BookFlowAI.Api.Hubs;
+
+[Authorize]
+public class BookingHub : Hub
 {
-    [Authorize]
-    public class BookingHub : Hub
+    private readonly IApplicationDbContext _context;
+
+    public BookingHub(IApplicationDbContext context) => _context = context;
+
+    public override async Task OnConnectedAsync()
     {
-        // انضمام الأدمن لغرفة التنبيهات المباشرة
-        public async Task JoinAdminGroup()
+        if (Context.User?.IsInRole("Admin") == true)
         {
-            if (Context.User != null && Context.User.IsInRole("Admin"))
-            {
-                await Groups.AddToGroupAsync(Context.ConnectionId, "Admins");
-            }
+            await Groups.AddToGroupAsync(Context.ConnectionId, "Admins");
+        }
+        else if (Context.User?.IsInRole("Staff") == true && TryGetUserId(out var userId))
+        {
+            var staffId = await _context.StaffMembers
+                .Where(staff => staff.UserId == userId)
+                .Select(staff => (int?)staff.Id)
+                .SingleOrDefaultAsync();
+            if (staffId.HasValue)
+                await Groups.AddToGroupAsync(Context.ConnectionId, $"Staff_{staffId.Value}");
         }
 
-        // انضمام الموظف لغرفة التنبيهات الخاصة به
-        public async Task JoinStaffGroup(int staffId)
-        {
-            if (Context.User != null && (Context.User.IsInRole("Staff") || Context.User.IsInRole("Admin")))
-            {
-                await Groups.AddToGroupAsync(Context.ConnectionId, $"Staff_{staffId}");
-            }
-        }
+        await base.OnConnectedAsync();
     }
+
+    public Task JoinAdminGroup() => Context.User?.IsInRole("Admin") == true
+        ? Groups.AddToGroupAsync(Context.ConnectionId, "Admins")
+        : Task.CompletedTask;
+
+    public async Task JoinStaffGroup(int staffId)
+    {
+        if (Context.User?.IsInRole("Admin") == true)
+        {
+            await Groups.AddToGroupAsync(Context.ConnectionId, $"Staff_{staffId}");
+            return;
+        }
+
+        if (Context.User?.IsInRole("Staff") != true || !TryGetUserId(out var userId)) return;
+        if (await _context.StaffMembers.AnyAsync(staff => staff.Id == staffId && staff.UserId == userId))
+            await Groups.AddToGroupAsync(Context.ConnectionId, $"Staff_{staffId}");
+    }
+
+    private bool TryGetUserId(out int userId) => int.TryParse(
+        Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? Context.User?.FindFirst("sub")?.Value,
+        out userId);
 }

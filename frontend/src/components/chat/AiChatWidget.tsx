@@ -154,8 +154,8 @@ export default function AiChatWidget() {
   );
 
   useEffect(() => {
-    const resolvedSessionId = getOrCreateSessionId();
-    setSessionId(resolvedSessionId);
+    const timer = window.setTimeout(() => setSessionId(getOrCreateSessionId()), 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
   useEffect(() => {

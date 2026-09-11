@@ -10,6 +10,7 @@
 
     // Services Management
     public record CreateServiceDto(
+        int BusinessCategoryId,
         string Name,
         string Description,
         decimal Price,
@@ -17,6 +18,7 @@
     );
 
     public record UpdateServiceDto(
+        int BusinessCategoryId,
         string Name,
         string Description,
         decimal Price,
@@ -24,17 +26,56 @@
         bool IsActive
     );
 
-    // Staff Management
-    public record CreateStaffDto(
-        int UserId,
-        string Specialties,
-        string WorkingHours
+    // Staff Management (legacy DTOs retained for /api/staff compatibility)
+    public record CreateStaffDto(int UserId, string Specialties, string WorkingHours);
+    public record UpdateStaffDto(string Specialties, string WorkingHours);
+
+    public record StaffShiftInputDto(
+        DayOfWeek DayOfWeek,
+        TimeSpan StartTime,
+        TimeSpan EndTime
     );
 
-    public record UpdateStaffDto(
-        string Specialties,
-        string WorkingHours
+    public record AdminCreateStaffDto(
+        string Name,
+        string Email,
+        string Password,
+        string? PhoneNumber,
+        string? Specialties,
+        bool IsAvailable,
+        IReadOnlyCollection<int> ServiceIds,
+        IReadOnlyCollection<StaffShiftInputDto> Shifts
     );
+
+    public record AdminUpdateStaffDto(
+        string Name,
+        string Email,
+        string? PhoneNumber,
+        string? Specialties,
+        bool IsAvailable,
+        IReadOnlyCollection<int> ServiceIds,
+        IReadOnlyCollection<StaffShiftInputDto> Shifts
+    );
+
+    public record AdminStaffServiceDto(int Id, string Name);
+    public record AdminStaffShiftDto(int Id, DayOfWeek DayOfWeek, TimeSpan StartTime, TimeSpan EndTime);
+    public record AdminStaffDto(
+        int Id,
+        int UserId,
+        string Name,
+        string Email,
+        string? PhoneNumber,
+        string? Specialties,
+        bool IsAvailable,
+        IReadOnlyCollection<AdminStaffServiceDto> Services,
+        IReadOnlyCollection<AdminStaffShiftDto> Shifts
+    );
+
+    public record SetStaffAvailabilityDto(bool IsAvailable);
+
+    // Dynamic business categories
+    public record CreateBusinessCategoryDto(string Name, string? Slug, string? Description);
+    public record UpdateBusinessCategoryDto(string Name, string? Slug, string? Description, bool IsActive);
 
     public record SetStaffScheduleDto(
         DayOfWeek DayOfWeek,
@@ -46,6 +87,20 @@
         DateTime Date,
         bool IsApproved,
         string? AdminComment
+    );
+
+    public record ReviewTimeOffRequestDto(bool IsApproved, string? AdminComment);
+
+    public record AdminTimeOffRequestDto(
+        int Id,
+        int StaffId,
+        string StaffName,
+        DateTime Date,
+        string? Reason,
+        string Status,
+        string? AdminComment,
+        DateTime CreatedAt,
+        DateTime? ReviewedAt
     );
 
     // Admin Booking Override
@@ -85,6 +140,7 @@
     // AI Business Data
     public record UpdateBusinessAiDataDto(
         string BusinessName,
+        string? IndustryCategory,
         string WorkingHoursInfo,
         string PolicyInfo,
         string ServicesSummary,

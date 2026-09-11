@@ -25,21 +25,29 @@ namespace BookFlowAI.Api.Controllers
 
         // GET /api/staff
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<StaffProfileDto>>> GetAll()
+        public async Task<ActionResult<IEnumerable<StaffProfileDto>>> GetAll([FromQuery] int? serviceId = null)
         {
-            var staffList = await _context.StaffMembers
+            var query = _context.StaffMembers
+                .Where(s => s.IsAvailable)
+                .AsQueryable();
+            if (serviceId.HasValue)
+                query = query.Where(staff => staff.StaffServices.Any(item => item.ServiceId == serviceId.Value));
+
+            var staffList = await query
                 .Select(s => new StaffProfileDto(
                     s.Id,
                     s.UserId,
                     s.User.Name,
                     s.User.Email,
                     s.User.PhoneNumber,
-                    s.Specialties,
-                    s.WorkingHours,
+                    s.Specialties ?? string.Empty,
+                    s.WorkingHours ?? string.Empty,
                     s.Bookings
                         .Where(b => b.Review != null)
                         .Select(b => (double?)b.Review!.Rating)
-                        .Average() ?? 0
+                        .Average() ?? 0,
+                    s.IsAvailable,
+                    null
                 ))
                 .ToListAsync();
 
@@ -54,15 +62,18 @@ namespace BookFlowAI.Api.Controllers
                 .Include(s => s.User)
                 .Include(s => s.Bookings).ThenInclude(b => b.Review)
                 .Where(s => s.Id == id)
+                .Where(s => s.IsAvailable)
                 .Select(s => new StaffProfileDto(
                     s.Id,
                     s.UserId,
                     s.User.Name,
                     s.User.Email,
                     s.User.PhoneNumber,
-                    s.Specialties,
-                    s.WorkingHours,
-                    s.Bookings.Where(b => b.Review != null).Select(b => b.Review!.Rating).DefaultIfEmpty(0).Average()
+                    s.Specialties ?? string.Empty,
+                    s.WorkingHours ?? string.Empty,
+                    s.Bookings.Where(b => b.Review != null).Select(b => b.Review!.Rating).DefaultIfEmpty(0).Average(),
+                    s.IsAvailable,
+                    null
                 ))
                 .FirstOrDefaultAsync();
 
@@ -74,6 +85,13 @@ namespace BookFlowAI.Api.Controllers
         [HttpGet("{id:int}/availability")]
         public async Task<ActionResult<IEnumerable<AvailabilitySlotDto>>> GetAvailability(int id, [FromQuery] DateTime date)
         {
+            if (date == default) return BadRequest(new { message = "A valid date is required." });
+            if (!await _context.StaffMembers.AnyAsync(staff => staff.Id == id && staff.IsAvailable))
+                return Ok(Array.Empty<AvailabilitySlotDto>());
+            if (await _context.StaffTimeOffRequests.AnyAsync(request => request.StaffId == id
+                && request.Date == date.Date && request.Status == "Approved"))
+                return Ok(Array.Empty<AvailabilitySlotDto>());
+
             var dayOfWeek = date.DayOfWeek;
 
             // 1. جلب فترات العمل المسجلة لهذا اليوم
@@ -97,6 +115,7 @@ namespace BookFlowAI.Api.Controllers
                 while (current < schedule.EndTime)
                 {
                     var slotEnd = current.Add(TimeSpan.FromMinutes(30));
+                    if (slotEnd > schedule.EndTime) break;
                     var slotStartDateTime = date.Date.Add(current);
 
                     bool isBooked = existingBookings.Any(b =>
@@ -217,21 +236,26 @@ namespace BookFlowAI.Api.Controllers
             var staff = await GetCurrentStaffMemberAsync();
             if (staff == null) return NotFound("حساب الموظف غير موجود.");
 
-            var existingBookings = await _context.Bookings
-                .Where(b => b.StaffId == staff.Id && b.DateTime.Date == request.Date.Date && b.Status != "Cancelled")
-                .ToListAsync();
+            var requestedDate = request.Date.Date;
+            if (requestedDate < DateTime.Today)
+                return BadRequest(new { message = "Time off cannot be requested for a past date." });
+            if (await _context.StaffTimeOffRequests.AnyAsync(item => item.StaffId == staff.Id
+                && item.Date == requestedDate && (item.Status == "Pending" || item.Status == "Approved")))
+                return Conflict(new { message = "A time-off request already exists for this date." });
 
-            foreach (var booking in existingBookings)
+            _context.StaffTimeOffRequests.Add(new StaffTimeOffRequest
             {
-                booking.Status = "Cancelled";
-            }
+                StaffId = staff.Id,
+                Date = requestedDate,
+                Reason = request.Reason?.Trim()
+            });
 
             await _context.SaveChangesAsync();
 
             return Ok(new
             {
-                message = $"تم تسجيل طلب الإجازة ليوم {request.Date:yyyy-MM-dd} وإلغاء {existingBookings.Count} حجز مرتبطة بهذا اليوم.",
-                affectedBookings = existingBookings.Count
+                message = $"تم إرسال طلب الإجازة ليوم {requestedDate:yyyy-MM-dd} للمراجعة.",
+                affectedBookings = 0
             });
         }
 
@@ -247,8 +271,13 @@ namespace BookFlowAI.Api.Controllers
             {
                 UserId = dto.UserId,
                 Specialties = dto.Specialties,
-                WorkingHours = dto.WorkingHours
+                WorkingHours = dto.WorkingHours,
+                IsAvailable = true
             };
+
+            if (await _context.StaffMembers.AnyAsync(item => item.UserId == dto.UserId))
+                return Conflict(new { message = "This user already has a staff profile." });
+            user.Role = "Staff";
 
             _context.StaffMembers.Add(staff);
             await _context.SaveChangesAsync();
@@ -293,6 +322,14 @@ namespace BookFlowAI.Api.Controllers
             var staff = await _context.StaffMembers.FindAsync(id);
             if (staff == null) return NotFound("الموظف غير موجود.");
 
+            if (dto.StartTime >= dto.EndTime)
+                return BadRequest(new { message = "Shift end time must be after its start time." });
+            if (await _context.StaffSchedules.AnyAsync(schedule => schedule.StaffId == id
+                && schedule.DayOfWeek == dto.DayOfWeek
+                && schedule.StartTime < dto.EndTime
+                && schedule.EndTime > dto.StartTime))
+                return Conflict(new { message = "This shift overlaps an existing shift." });
+
             var schedule = new StaffSchedule
             {
                 StaffId = id,
@@ -315,6 +352,14 @@ namespace BookFlowAI.Api.Controllers
             var staff = await _context.StaffMembers.FindAsync(id);
             if (staff == null) return NotFound("الموظف غير موجود.");
 
+            var request = await _context.StaffTimeOffRequests
+                .FirstOrDefaultAsync(item => item.StaffId == id && item.Date == dto.Date.Date && item.Status == "Pending");
+            if (request == null) return NotFound(new { message = "No pending time-off request exists for this date." });
+
+            request.Status = dto.IsApproved ? "Approved" : "Rejected";
+            request.AdminComment = dto.AdminComment?.Trim();
+            request.ReviewedAt = DateTime.UtcNow;
+
             if (dto.IsApproved)
             {
                 var affectedBookings = await _context.Bookings
@@ -330,6 +375,7 @@ namespace BookFlowAI.Api.Controllers
                 return Ok(new { message = $"تمت الموافقة على الإجازة وإلغاء {affectedBookings.Count} حجز مرتبطة بيوم الإجازة." });
             }
 
+            await _context.SaveChangesAsync();
             return Ok(new { message = "تم رفض طلب الإجازة." });
         }
     }

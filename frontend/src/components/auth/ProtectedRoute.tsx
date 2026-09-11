@@ -61,7 +61,8 @@ export default function ProtectedRoute({
       return;
     }
 
-    setIsReady(true);
+    const timer = window.setTimeout(() => setIsReady(true), 0);
+    return () => window.clearTimeout(timer);
   }, [fallbackPath, requiredRole, router]);
 
   if (!isReady) {

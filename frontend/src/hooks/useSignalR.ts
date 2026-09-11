@@ -1,207 +1,107 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-    HubConnection,
-    HubConnectionBuilder,
-    HubConnectionState,
-    LogLevel,
-} from "@microsoft/signalr";
+import { HubConnection, HubConnectionBuilder, HubConnectionState, LogLevel } from "@microsoft/signalr";
+import type { BookingNotification, BookingStatusUpdate } from "../lib/api";
 
-import type {
-    BookingNotification,
-    BookingStatusUpdate,
-} from "../lib/api";
-
-export type SignalRConnectionStatus =
-    | "connecting"
-    | "connected"
-    | "reconnecting"
-    | "disconnected"
-    | "error";
-
+export type SignalRConnectionStatus = "connecting" | "connected" | "reconnecting" | "disconnected" | "error";
 export interface BookingHubEvents {
-    ReceiveNewBooking: (payload: BookingNotification) => void;
-    ReceiveBookingUpdate: (payload: BookingStatusUpdate) => void;
-    BookingStatusUpdated: (payload: BookingStatusUpdate) => void;
+  ReceiveNewBooking: (payload: BookingNotification) => void;
+  ReceiveBookingUpdate: (payload: BookingStatusUpdate) => void;
+  BookingStatusUpdated: (payload: BookingStatusUpdate) => void;
+}
+export interface UseSignalROptions {
+  hubUrl?: string;
+  accessToken?: string | null;
+  autoStart?: boolean;
+  onError?: (error: Error | null) => void;
+  handlers?: Partial<BookingHubEvents>;
 }
 
-export interface UseSignalROptions<TEvents extends object = BookingHubEvents> {
-    hubUrl?: string;
-    accessToken?: string | null;
-    autoStart?: boolean;
-    onError?: (error: Error | null) => void;
-    handlers?: Partial<TEvents>;
-}
-
-const DEFAULT_HUB_URL =
-    process.env.NEXT_PUBLIC_SIGNALR_URL || "http://localhost:5000/hubs/bookings";
-
-const resolveAccessToken = (): string => {
-    if (typeof window === "undefined") {
-        return "";
-    }
-
-    const candidates = ["access_token", "token", "authToken"];
-    for (const key of candidates) {
-        const value = window.localStorage.getItem(key);
-        if (value) {
-            return value;
-        }
-    }
-
-    const cookieValue = document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("access_token="));
-
-    if (!cookieValue) {
-        return "";
-    }
-
-    return decodeURIComponent(cookieValue.split("=")[1] ?? "");
+const defaultHubUrl = process.env.NEXT_PUBLIC_SIGNALR_URL || "http://localhost:5000/hubs/bookings";
+const resolveAccessToken = () => {
+  if (typeof window === "undefined") return "";
+  for (const key of ["access_token", "token", "authToken"]) {
+    const token = window.localStorage.getItem(key);
+    if (token) return token;
+  }
+  const cookie = document.cookie.split("; ").find((row) => row.startsWith("access_token="));
+  return cookie ? decodeURIComponent(cookie.split("=")[1] ?? "") : "";
 };
 
-export function useSignalR<TEvents extends object = BookingHubEvents>(
-    options: UseSignalROptions<TEvents> = {},
-) {
-    const {
-        hubUrl = DEFAULT_HUB_URL,
-        accessToken,
-        autoStart = true,
-        onError,
-        handlers = {} as Partial<TEvents>,
-    } = options;
+export function useSignalR(options: UseSignalROptions = {}) {
+  const { hubUrl = defaultHubUrl, accessToken, autoStart = true, onError, handlers = {} } = options;
+  const connectionRef = useRef<HubConnection | null>(null);
+  const handlersRef = useRef<Partial<BookingHubEvents>>({});
+  const [isConnected, setIsConnected] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<SignalRConnectionStatus>("disconnected");
+  const [error, setError] = useState<Error | null>(null);
 
-    const connectionRef = useRef<HubConnection | null>(null);
-    const [isConnected, setIsConnected] = useState(false);
-    const [connectionStatus, setConnectionStatus] = useState<SignalRConnectionStatus>("disconnected");
-    const [error, setError] = useState<Error | null>(null);
+  useEffect(() => { handlersRef.current = handlers; }, [handlers]);
 
-    const start = useCallback(async () => {
-        if (connectionRef.current) {
-            if (connectionRef.current.state === HubConnectionState.Connected) {
-                return;
-            }
+  const start = useCallback(async () => {
+    if (connectionRef.current?.state === HubConnectionState.Connected
+      || connectionRef.current?.state === HubConnectionState.Connecting) return;
 
-            if (connectionRef.current.state === HubConnectionState.Connecting) {
-                return;
-            }
-        }
+    const connection = new HubConnectionBuilder()
+      .withUrl(hubUrl, { withCredentials: true, accessTokenFactory: () => accessToken ?? resolveAccessToken() })
+      .withAutomaticReconnect([0, 2000, 5000, 10000])
+      .configureLogging(LogLevel.Warning)
+      .build();
 
-        const tokenToUse = accessToken ?? resolveAccessToken();
+    connection.on("ReceiveNewBooking", (payload: BookingNotification) => handlersRef.current.ReceiveNewBooking?.(payload));
+    connection.on("ReceiveBookingUpdate", (payload: BookingStatusUpdate) => handlersRef.current.ReceiveBookingUpdate?.(payload));
+    connection.on("BookingStatusUpdated", (payload: BookingStatusUpdate) => handlersRef.current.BookingStatusUpdated?.(payload));
+    connection.onreconnecting((nextError) => { setConnectionStatus("reconnecting"); setIsConnected(false); if (nextError) setError(nextError); });
+    connection.onreconnected(() => { setConnectionStatus("connected"); setIsConnected(true); setError(null); });
+    connection.onclose((nextError) => { setConnectionStatus("disconnected"); setIsConnected(false); if (nextError) setError(nextError); });
+    connectionRef.current = connection;
+    setConnectionStatus("connecting");
 
-        const connection = new HubConnectionBuilder()
-            .withUrl(hubUrl, {
-                withCredentials: true,
-                accessTokenFactory: () => tokenToUse,
-            })
-            .withAutomaticReconnect([0, 2000, 5000, 10000])
-            .configureLogging(LogLevel.Warning)
-            .build();
+    try {
+      await connection.start();
+      setConnectionStatus("connected");
+      setIsConnected(true);
+      setError(null);
+      onError?.(null);
+    } catch (caught) {
+      const nextError = caught instanceof Error ? caught : new Error("SignalR connection failed");
+      setConnectionStatus("error");
+      setError(nextError);
+      onError?.(nextError);
+    }
+  }, [accessToken, hubUrl, onError]);
 
-        connectionRef.current = connection;
-        setConnectionStatus("connecting");
+  const stop = useCallback(async () => {
+    const connection = connectionRef.current;
+    if (!connection) return;
+    connectionRef.current = null;
+    await connection.stop();
+    setIsConnected(false);
+    setConnectionStatus("disconnected");
+  }, []);
 
-        Object.entries(handlers as Record<string, (...args: any[]) => void>).forEach(
-            ([eventName, listener]) => {
-                if (typeof listener === "function") {
-                    connection.on(eventName, (...args: unknown[]) => listener(...(args as any[])));
-                }
-            },
-        );
+  const invoke = useCallback(async <TResult = unknown>(method: string, ...args: unknown[]): Promise<TResult> => {
+    const connection = connectionRef.current;
+    if (!connection || connection.state !== HubConnectionState.Connected)
+      throw new Error("SignalR connection is not connected.");
+    return connection.invoke<TResult>(method, ...args);
+  }, []);
 
-        connection.onreconnecting((err) => {
-            setConnectionStatus("reconnecting");
-            setIsConnected(false);
-            if (err) {
-                setError(err);
-            }
-        });
+  useEffect(() => {
+    if (!autoStart) return;
+    const timer = window.setTimeout(() => { void start(); }, 0);
+    return () => { window.clearTimeout(timer); void stop(); };
+  }, [autoStart, start, stop]);
 
-        connection.onreconnected(() => {
-            setConnectionStatus("connected");
-            setIsConnected(true);
-            setError(null);
-        });
-
-        connection.onclose((err) => {
-            setConnectionStatus("disconnected");
-            setIsConnected(false);
-            if (err) {
-                setError(err);
-            }
-        });
-
-        try {
-            await connection.start();
-            setConnectionStatus("connected");
-            setIsConnected(true);
-            setError(null);
-            onError?.(null);
-        } catch (err) {
-            const nextError = err instanceof Error ? err : new Error("SignalR connection failed");
-            setConnectionStatus("error");
-            setIsConnected(false);
-            setError(nextError);
-            onError?.(nextError);
-        }
-    }, [accessToken, handlers, hubUrl, onError]);
-
-    const stop = useCallback(async () => {
-        if (!connectionRef.current) {
-            return;
-        }
-
-        try {
-            await connectionRef.current.stop();
-        } finally {
-            setIsConnected(false);
-            setConnectionStatus("disconnected");
-            connectionRef.current = null;
-        }
-    }, []);
-
-    const invoke = useCallback(async <TResult = unknown>(method: string, ...args: unknown[]): Promise<TResult> => {
-        if (!connectionRef.current) {
-            throw new Error("SignalR connection is not initialized.");
-        }
-
-        if (connectionRef.current.state !== HubConnectionState.Connected) {
-            throw new Error(`SignalR connection is not connected: ${connectionRef.current.state}`);
-        }
-
-        return connectionRef.current.invoke<TResult>(method, ...args);
-    }, []);
-
-    const joinAdminGroup = useCallback(async () => {
-        await invoke("JoinAdminGroup");
-    }, [invoke]);
-
-    const joinStaffGroup = useCallback(async (staffId: number) => {
-        await invoke("JoinStaffGroup", staffId);
-    }, [invoke]);
-
-    useEffect(() => {
-        if (!autoStart) {
-            return;
-        }
-
-        void start();
-
-        return () => {
-            void stop();
-        };
-    }, [autoStart, start, stop]);
-
-    return {
-        connection: connectionRef.current,
-        start,
-        stop,
-        invoke,
-        joinAdminGroup,
-        joinStaffGroup,
-        isConnected,
-        connectionStatus,
-        error,
-    };
+  return {
+    start,
+    stop,
+    invoke,
+    joinAdminGroup: () => invoke("JoinAdminGroup"),
+    joinStaffGroup: (staffId: number) => invoke("JoinStaffGroup", staffId),
+    isConnected,
+    connectionStatus,
+    error,
+  };
 }
 
 export default useSignalR;

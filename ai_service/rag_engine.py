@@ -28,22 +28,26 @@ def ingest_business_data_to_vector_db(req: IngestBusinessDataRequest) -> int:
 
     # 1. إدخال السياسات
     if req.policies:
-        documents.append(f"سياسات المنشأة ({req.business_name or ''}): {req.policies}")
+        documents.append(
+            f"Business: {req.business_name or 'Service business'}; "
+            f"Industry: {req.business_category or 'General services'}; Policies: {req.policies}"
+        )
         ids.append(f"b_{req.business_id}_policy")
         metadatas.append({"business_id": req.business_id, "type": "policy"})
 
     # 2. إدخال الخدمات
     for idx, s in enumerate(req.services):
-        desc = f" - الوصف: {s.description}" if s.description else ""
-        dur = f" - المدة: {s.duration_minutes} دقيقة" if s.duration_minutes else ""
-        doc_text = f"خدمة: {s.name} - السعر: {s.price} جنيه{dur}{desc}"
+        desc = f"; Description: {s.description}" if s.description else ""
+        dur = f"; Duration: {s.duration_minutes} minutes" if s.duration_minutes else ""
+        category = s.category or req.business_category or "General services"
+        doc_text = f"Service: {s.name}; Category: {category}; Price: {s.price}{dur}{desc}"
         
         documents.append(doc_text)
         ids.append(f"b_{req.business_id}_service_{idx}")
         metadatas.append({"business_id": req.business_id, "type": "service"})
 
     if documents:
-        collection.add(
+        collection.upsert(
             documents=documents,
             ids=ids,
             metadatas=metadatas

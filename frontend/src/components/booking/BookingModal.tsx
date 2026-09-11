@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useForm } from "react-hook-form";
+import { useEffect, useState } from "react";
+import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 import {
   bookingsApi,
@@ -116,32 +116,31 @@ export default function BookingModal({
     },
   });
 
-  const selectedStaff = useMemo(
-    () =>
-      staffMembers.find((staff) => staff.id === form.watch("staffId")) ?? null,
-    [form, staffMembers],
-  );
-
-  const selectedSlot = form.watch("slot");
-  const selectedDate = form.watch("selectedDate");
+  const selectedStaffId = useWatch({ control: form.control, name: "staffId" });
+  const selectedStaff = staffMembers.find((staff) => staff.id === selectedStaffId) ?? null;
+  const selectedSlot = useWatch({ control: form.control, name: "slot" });
+  const selectedDate = useWatch({ control: form.control, name: "selectedDate" });
 
   useEffect(() => {
     if (!open) {
-      setStep(1);
-      setCreatedBooking(null);
-      setErrorMessage(null);
-      form.reset({
-        staffId: 0,
-        selectedDate: "",
-        slot: null,
-      });
-      return;
+      const resetTimer = window.setTimeout(() => {
+        setStep(1);
+        setCreatedBooking(null);
+        setErrorMessage(null);
+        form.reset({
+          staffId: 0,
+          selectedDate: "",
+          slot: null,
+        });
+      }, 0);
+
+      return () => window.clearTimeout(resetTimer);
     }
 
     const loadStaff = async () => {
       try {
         setLoadingStaff(true);
-        const result = await api.staff.getAll();
+        const result = await api.staff.getAll(service?.id);
         setStaffMembers(result);
       } catch (error) {
         const message =
@@ -155,20 +154,23 @@ export default function BookingModal({
     };
 
     void loadStaff();
-  }, [form, open]);
+  }, [form, open, service?.id]);
 
   useEffect(() => {
-    if (!open || !form.watch("staffId") || !selectedDate) {
-      setSlots([]);
-      form.setValue("slot", null);
-      return;
+    if (!open || !selectedStaffId || !selectedDate) {
+      const resetTimer = window.setTimeout(() => {
+        setSlots([]);
+        form.setValue("slot", null);
+      }, 0);
+
+      return () => window.clearTimeout(resetTimer);
     }
 
     const fetchSlots = async () => {
       try {
         setLoadingSlots(true);
         const result = await api.staff.getAvailableSlots(
-          form.watch("staffId"),
+          selectedStaffId,
           selectedDate,
         );
         setSlots(result.filter((slot) => slot.isAvailable));
@@ -184,7 +186,7 @@ export default function BookingModal({
     };
 
     void fetchSlots();
-  }, [form, open, selectedDate]);
+  }, [form, open, selectedDate, selectedStaffId]);
 
   const validateStep = (currentStep: number) => {
     if (currentStep === 1) {
@@ -406,7 +408,7 @@ export default function BookingModal({
                             setErrorMessage(null);
                           }}
                           className={`rounded-2xl border p-4 text-left transition ${
-                            form.watch("staffId") === staff.id
+                            selectedStaffId === staff.id
                               ? "border-violet-500 bg-violet-50 shadow-sm"
                               : "border-slate-200 bg-white hover:border-violet-200 hover:bg-violet-50/30"
                           }`}
@@ -457,7 +459,7 @@ export default function BookingModal({
                       id="booking-date"
                       type="date"
                       min={new Date().toISOString().split("T")[0]}
-                      value={form.watch("selectedDate")}
+                      value={selectedDate}
                       onChange={(event) =>
                         form.setValue("selectedDate", event.target.value)
                       }

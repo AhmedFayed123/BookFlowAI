@@ -1,0 +1,14 @@
+.git
+.github
+.vs
+.vscode
+**/bin
+**/obj
+**/.next
+**/node_modules
+frontend
+ai_service
+build_log.txt
+*.user
+*.suo
+*.joblib

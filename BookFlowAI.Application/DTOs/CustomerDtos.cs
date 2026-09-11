@@ -8,7 +8,18 @@
         string Name,
         string Description,
         decimal Price,
-        int DurationInMinutes
+        int DurationInMinutes,
+        int BusinessCategoryId = 0,
+        string BusinessCategoryName = "Uncategorized",
+        bool IsActive = true
+    );
+
+    public record BusinessCategoryDto(
+        int Id,
+        string Name,
+        string Slug,
+        string Description,
+        bool IsActive
     );
 
     public record StaffProfileDto(
@@ -19,11 +30,14 @@
         string? PhoneNumber,
         string Specialties,
         string WorkingHours,
-        double AverageRating
+        double AverageRating,
+        bool IsAvailable = true,
+        IReadOnlyCollection<AdminStaffServiceDto>? Services = null
     );
 
     public record BusinessInfoDto(
         int Id,
+        string Category,
         string Content
     );
 

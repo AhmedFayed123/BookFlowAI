@@ -2,36 +2,27 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import AiChatWidget from "../components/chat/AiChatWidget";
 import ServiceList from "../components/booking/ServiceList";
 import { authStorage } from "../lib/api";
 
-const demoService = {
-  id: 1,
-  name: "Signature Facial Renewal",
-  description:
-    "Luxury skin treatment designed to improve tone, hydration, and clarity with AI-guided timing recommendations.",
-  price: 179,
-  durationInMinutes: 60,
-};
-
 export default function HomePage() {
+  const router = useRouter();
   const [user, setUser] = useState<{ name?: string; role?: string } | null>(
     null,
   );
-  const [quickBookOpen, setQuickBookOpen] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    try {
-      const raw = window.localStorage.getItem("bookflow_user");
-      if (raw) {
-        setUser(JSON.parse(raw));
-      }
-    } catch {
-      setUser(null);
-    }
+    const timer = window.setTimeout(() => {
+      try {
+        const raw = window.localStorage.getItem("bookflow_user");
+        setUser(raw ? JSON.parse(raw) : null);
+      } catch { setUser(null); }
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
   const roleLabel = useMemo(() => user?.role || "Guest", [user]);
@@ -39,7 +30,7 @@ export default function HomePage() {
   const handleLogout = () => {
     authStorage.clear();
     window.localStorage.removeItem("bookflow_user");
-    window.location.href = "/login";
+    router.push("/login");
   };
 
   return (
@@ -93,33 +84,30 @@ export default function HomePage() {
           <div className="rounded-[32px] border border-slate-200 bg-white p-8 shadow-sm">
             <div className="inline-flex items-center gap-2 rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-violet-700">
               <span className="h-2 w-2 rounded-full bg-emerald-500" />
-              Smart salon & gym management
+              Dynamic service operations
             </div>
 
             <h2 className="mt-6 max-w-xl text-5xl font-black leading-tight text-slate-900">
-              BookFlowAI - Smart Salon & Gym Management Platform
+              One booking platform for every service industry
             </h2>
             <p className="mt-5 max-w-2xl text-lg text-slate-600">
-              Automate bookings, reduce no-shows with AI forecasting, and keep
-              staff, admin, and customers aligned in one real-time operations
-              layer.
+              Configure categories, services, providers, and schedules for
+              clinics, wellness teams, coaches, auto-care centers, consultants,
+              and any appointment-based business.
             </p>
 
             <div className="mt-8 flex flex-wrap gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setQuickBookOpen(true);
-                }}
+              <a
+                href="#services"
                 className="rounded-full bg-gradient-to-r from-violet-600 to-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-md transition hover:brightness-110"
               >
                 Book an Appointment
-              </button>
+              </a>
               <Link
                 href="/admin/dashboard"
                 className="rounded-full border border-slate-200 bg-slate-50 px-5 py-3 text-sm font-semibold text-slate-700 transition hover:border-violet-200 hover:bg-violet-50"
               >
-                Admin Demo Dashboard
+                Admin Dashboard
               </Link>
             </div>
 
@@ -190,10 +178,8 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="mx-auto max-w-7xl px-6 pb-20">
-        <ServiceList
-          initialSelectedService={quickBookOpen ? demoService : null}
-        />
+      <section id="services" className="mx-auto max-w-7xl px-6 pb-20">
+        <ServiceList />
       </section>
 
       <AiChatWidget />

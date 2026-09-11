@@ -8,10 +8,10 @@ import { authApi, authStorage } from "../../lib/api";
 export default function RegisterPage() {
   const router = useRouter();
   const [form, setForm] = useState({
-    name: "Demo User",
-    email: "demo@bookflow.ai",
-    password: "Password123!",
-    phoneNumber: "+966500000000",
+    name: "",
+    email: "",
+    password: "",
+    phoneNumber: "",
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

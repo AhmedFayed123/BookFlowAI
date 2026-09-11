@@ -91,5 +91,34 @@ namespace BookFlowAI.Infrastructure.Services
                 );
             }
         }
+
+        public async Task<bool> IngestBusinessDataAsync(AiBusinessDataRequest request)
+        {
+            var payload = new
+            {
+                business_id = request.BusinessId,
+                business_name = request.BusinessName,
+                business_category = request.BusinessCategory,
+                services = request.Services.Select(service => new
+                {
+                    name = service.Name,
+                    category = service.Category,
+                    price = service.Price,
+                    description = service.Description,
+                    duration_minutes = service.DurationMinutes
+                }),
+                policies = request.Policies
+            };
+
+            try
+            {
+                using var response = await _httpClient.PostAsJsonAsync("/ingest-business-data", payload);
+                return response.IsSuccessStatusCode;
+            }
+            catch
+            {
+                return false;
+            }
+        }
     }
 }

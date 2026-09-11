@@ -25,12 +25,6 @@ export default function ServiceList({
   );
 
   useEffect(() => {
-    if (initialSelectedService) {
-      setSelectedService(initialSelectedService);
-    }
-  }, [initialSelectedService]);
-
-  useEffect(() => {
     let isMounted = true;
 
     const loadServices = async () => {
@@ -58,7 +52,7 @@ export default function ServiceList({
     if (!query) return services;
 
     return services.filter((service) =>
-      [service.name, service.description]
+      [service.name, service.description, service.businessCategoryName]
         .join(" ")
         .toLowerCase()
         .includes(query),
@@ -119,7 +113,7 @@ export default function ServiceList({
               >
                 <div className="flex items-center justify-between gap-3">
                   <div className="rounded-2xl bg-violet-50 px-2.5 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] text-violet-700">
-                    Service
+                    {service.businessCategoryName}
                   </div>
                   <div className="text-xs font-medium text-slate-400">
                     {service.durationInMinutes} min

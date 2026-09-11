@@ -7,8 +7,8 @@ import { authApi, authStorage, type AuthResponse } from "../../lib/api";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("admin@bookflow.ai");
-  const [password, setPassword] = useState("Password123!");
+  const [email, setEmail] = useState("admin@bookflow.com");
+  const [password, setPassword] = useState("Admin@123456");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -32,6 +32,11 @@ export default function LoginPage() {
 
       if (result.role === "Admin") {
         router.push("/admin/dashboard");
+        return;
+      }
+
+      if (result.role === "Staff") {
+        router.push("/staff");
         return;
       }
 
