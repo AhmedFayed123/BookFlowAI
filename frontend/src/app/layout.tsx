@@ -14,8 +14,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "BookFlowAI - Next-Gen Autonomous Booking & Resource Platform",
-  description: "AI-powered booking and operations platform",
+  title: "BookFlow AI — Booking, without the back-and-forth",
+  description: "Find services, choose a provider, and make time for what matters.",
+  icons: { icon: "/logo.svg" },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

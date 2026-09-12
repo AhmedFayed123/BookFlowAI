@@ -18,7 +18,7 @@ export default function ConnectionStatusBadge({ status, onRetry }: { status: Sig
 
   return (
     <div
-      className={`inline-flex items-center gap-2 rounded-full border px-3 py-2 text-xs font-bold ${connected ? "border-emerald-200 bg-emerald-50 text-emerald-700" : pending ? "border-amber-200 bg-amber-50 text-amber-700" : "border-slate-200 bg-white text-slate-600"}`}
+      className={`inline-flex items-center gap-2 rounded-full border px-3 py-2 text-xs font-semibold ${connected ? "border-emerald-200 bg-emerald-50 text-emerald-700" : pending ? "border-amber-200 bg-amber-50 text-amber-700" : "border-slate-200 bg-white text-slate-600"}`}
       role="status"
       title={connected ? "Changes arrive instantly." : "This page refreshes periodically until the live connection returns."}
     >

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { ArrowRight, LoaderCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { authApi, authStorage } from "../../lib/api";
@@ -53,13 +54,13 @@ export default function RegisterPage() {
   };
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4 py-12">
-      <div className="w-full max-w-lg rounded-[30px] border border-slate-200 bg-white p-8 shadow-[0_20px_60px_rgba(15,23,42,0.12)]">
+    <main className="flex min-h-screen items-center justify-center hero-canvas bg-background px-4 py-12">
+      <div className="w-full max-w-lg surface-card rounded-2xl p-8 shadow-[0_20px_60px_-30px_rgba(15,23,42,0.25)] sm:p-10">
         <div className="mb-8 text-center">
-          <div className="inline-flex rounded-full bg-violet-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-violet-700">
+          <div className="section-kicker">
             BookFlow AI
           </div>
-          <h1 className="mt-4 text-3xl font-black text-slate-900">
+          <h1 className="mt-4 text-3xl font-bold text-slate-900">
             Create account
           </h1>
           <p className="mt-2 text-sm text-slate-500">
@@ -80,7 +81,7 @@ export default function RegisterPage() {
               onChange={(event) =>
                 setForm((current) => ({ ...current, name: event.target.value }))
               }
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-800 outline-none transition focus:border-violet-400 focus:bg-white"
+              className="field-control w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-800 outline-none transition-all duration-200 ease-in-out focus:border-slate-400 focus:bg-white"
               required
               autoComplete="name"
             />
@@ -101,7 +102,7 @@ export default function RegisterPage() {
                   email: event.target.value,
                 }))
               }
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-800 outline-none transition focus:border-violet-400 focus:bg-white"
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-800 outline-none transition-all duration-200 ease-in-out focus:border-slate-400 focus:bg-white"
               required
               autoComplete="email"
             />
@@ -122,7 +123,7 @@ export default function RegisterPage() {
                   phoneNumber: event.target.value,
                 }))
               }
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-800 outline-none transition focus:border-violet-400 focus:bg-white"
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-800 outline-none transition-all duration-200 ease-in-out focus:border-slate-400 focus:bg-white"
               autoComplete="tel"
             />
           </div>
@@ -142,7 +143,7 @@ export default function RegisterPage() {
                   password: event.target.value,
                 }))
               }
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-800 outline-none transition focus:border-violet-400 focus:bg-white"
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-800 outline-none transition-all duration-200 ease-in-out focus:border-slate-400 focus:bg-white"
               required
               minLength={8}
               autoComplete="new-password"
@@ -150,7 +151,7 @@ export default function RegisterPage() {
           </div>
 
           {error && (
-            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+            <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
               {error}
             </div>
           )}
@@ -158,15 +159,16 @@ export default function RegisterPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-2xl bg-gradient-to-r from-violet-600 to-indigo-600 px-4 py-3 text-sm font-semibold text-white shadow-md transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+            className="w-full rounded-xl button-primary px-4 py-3 text-sm font-semibold text-white  transition-all duration-200 ease-in-out hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
           >
+            {loading ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <ArrowRight className="h-4 w-4" aria-hidden="true" />}
             {loading ? "Creating account..." : "Create account"}
           </button>
         </form>
 
         <div className="mt-6 text-center text-sm text-slate-500">
           Already registered?{" "}
-          <Link href="/login" className="font-semibold text-violet-700">
+          <Link href="/login" className="font-semibold text-emerald-700">
             Log in
           </Link>
         </div>

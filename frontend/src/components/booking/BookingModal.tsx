@@ -12,7 +12,7 @@ import {
   type StaffProfileDto,
 } from "../../lib/api";
 import { calculateBookingEstimate } from "../../lib/serviceFilters";
-import { combineLocalDateAndTime, getUpcomingLocalDates, toLocalDateInputValue } from "../../lib/booking";
+import { combineLocalDateAndTime, getUpcomingLocalDates, toLocalDateInputValue, toScheduleDateTime } from "../../lib/booking";
 import { useToast } from "../ui/ToastProvider";
 
 const api = {
@@ -264,7 +264,7 @@ export default function BookingModal({
       const response = await api.bookings.create({
         staffId: form.getValues("staffId"),
         serviceId: service.id,
-        dateTime: bookingDate.toISOString(),
+        dateTime: toScheduleDateTime(selectedDate, selectedSlot?.startTime ?? ""),
       });
 
       setCreatedBookingId(response.bookingId);
@@ -285,14 +285,14 @@ export default function BookingModal({
   if (!open || !service) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/65 p-0 backdrop-blur-sm sm:items-center sm:p-4" onMouseDown={(event) => { if (event.target === event.currentTarget && !submitting) onClose(); }}>
-      <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="booking-modal-title" aria-describedby="booking-modal-description" className="max-h-[95vh] w-full max-w-3xl overflow-y-auto rounded-t-[2rem] border border-slate-200 bg-white shadow-[0_30px_90px_rgba(15,23,42,0.35)] sm:rounded-[2rem]">
-        <div className="flex items-center justify-between border-b border-slate-200 bg-gradient-to-r from-violet-600 to-indigo-600 px-5 py-4 text-white">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/35 p-0 sm:items-center sm:p-4" onMouseDown={(event) => { if (event.target === event.currentTarget && !submitting) onClose(); }}>
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="booking-modal-title" aria-describedby="booking-modal-description" className="max-h-[95vh] w-full max-w-3xl overflow-y-auto rounded-t-2xl border border-slate-200 bg-white shadow-sm sm:rounded-2xl">
+        <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-5 py-4 text-slate-900">
           <div>
-            <p className="text-xs uppercase tracking-[0.24em] text-violet-100">
+            <p className="text-xs font-medium tracking-wide text-emerald-800">
               Booking
             </p>
-            <h3 id="booking-modal-title" className="mt-1 text-xl font-bold">{service.name}</h3>
+            <h3 id="booking-modal-title" className="mt-1 text-xl font-semibold">{service.name}</h3>
             <p id="booking-modal-description" className="sr-only">Choose a provider and available time, then review and confirm your appointment.</p>
           </div>
 
@@ -300,7 +300,7 @@ export default function BookingModal({
             ref={closeButtonRef}
             type="button"
             onClick={onClose}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-xl transition hover:bg-white/20"
+            className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition-all duration-200 ease-in-out hover:bg-slate-100"
             aria-label="Close booking modal"
           >
             <X className="h-5 w-5" />
@@ -309,15 +309,15 @@ export default function BookingModal({
 
         {createdBookingId ? (
           <div className="space-y-6 p-6">
-            <div className="rounded-3xl border border-emerald-200 bg-emerald-50 p-5">
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-4">
                   <span className="grid h-12 w-12 place-items-center rounded-full bg-emerald-600 text-white"><CheckCircle2 className="h-7 w-7" /></span>
                   <div>
-                  <p className="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-700">
+                  <p className="text-sm font-semibold tracking-wide text-emerald-700">
                     Booking confirmed
                   </p>
-                  <h4 className="mt-2 text-3xl font-black text-slate-900">
+                  <h4 className="mt-2 text-3xl font-semibold text-slate-900">
                     #{createdBookingId}
                   </h4>
                   </div>
@@ -326,11 +326,11 @@ export default function BookingModal({
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <div className="text-xs uppercase tracking-[0.18em] text-slate-400">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-xs tracking-wide text-slate-500">
                   Service
                 </div>
-                <div className="mt-2 text-lg font-bold text-slate-900">
+                <div className="mt-2 text-lg font-semibold text-slate-900">
                   {service.name}
                 </div>
                 <div className="mt-1 text-sm text-slate-600">
@@ -339,11 +339,11 @@ export default function BookingModal({
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <div className="text-xs uppercase tracking-[0.18em] text-slate-400">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-xs tracking-wide text-slate-500">
                   Staff
                 </div>
-                <div className="mt-2 text-lg font-bold text-slate-900">
+                <div className="mt-2 text-lg font-semibold text-slate-900">
                   {selectedStaff?.name ?? "Assigned staff"}
                 </div>
                 <div className="mt-1 text-sm text-slate-600">
@@ -358,7 +358,7 @@ export default function BookingModal({
               <button
                 type="button"
                 onClick={onClose}
-                className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition-all duration-200 ease-in-out hover:bg-slate-50"
               >
                 Close
               </button>
@@ -370,13 +370,13 @@ export default function BookingModal({
               {[{ icon: UserRound, label: "Provider" }, { icon: CalendarDays, label: "Date & time" }, { icon: ShieldCheck, label: "Review" }].map((item, index) => {
                 const currentStep = index + 1;
                 const Icon = item.icon;
-                return <div key={item.label} className={`flex items-center justify-center gap-2 font-semibold ${step >= currentStep ? "text-violet-700" : "text-slate-400"}`}><span className={`grid h-7 w-7 place-items-center rounded-full ${step > currentStep ? "bg-emerald-100 text-emerald-700" : step === currentStep ? "bg-violet-100 text-violet-700" : "bg-slate-100"}`}>{step > currentStep ? <Check className="h-4 w-4" /> : <Icon className="h-4 w-4" />}</span><span className="hidden sm:inline">{item.label}</span></div>;
+                return <div key={item.label} className={`flex items-center justify-center gap-2 font-semibold ${step >= currentStep ? "text-emerald-700" : "text-slate-500"}`}><span className={`grid h-7 w-7 place-items-center rounded-full ${step > currentStep ? "bg-emerald-100 text-emerald-700" : step === currentStep ? "bg-emerald-100 text-emerald-700" : "bg-slate-100"}`}>{step > currentStep ? <Check className="h-4 w-4" /> : <Icon className="h-4 w-4" />}</span><span className="hidden sm:inline">{item.label}</span></div>;
               })}
             </div>
 
             <div className="space-y-5 p-5">
               {errorMessage && (
-                <div className="rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
                   {errorMessage}
                 </div>
               )}
@@ -384,7 +384,7 @@ export default function BookingModal({
               {step === 1 && (
                 <div className="space-y-4">
                   <div>
-                    <h4 className="text-lg font-bold text-slate-900">
+                    <h4 className="text-lg font-semibold text-slate-900">
                       Choose your staff
                     </h4>
                     <p className="mt-1 text-sm text-slate-500">
@@ -397,7 +397,7 @@ export default function BookingModal({
                       {Array.from({ length: 3 }).map((_, index) => (
                         <div
                           key={`staff-skeleton-${index}`}
-                          className="animate-pulse rounded-2xl border border-slate-200 bg-slate-50 p-4"
+                          className="skeleton-shimmer rounded-xl border border-slate-200 bg-slate-50 p-4"
                         >
                           <div className="h-4 w-28 rounded-full bg-slate-200" />
                           <div className="mt-3 h-3 w-full rounded-full bg-slate-200" />
@@ -407,7 +407,7 @@ export default function BookingModal({
                     </div>
                   ) : (
                     <div className="grid gap-3">
-                      {staffMembers.length === 0 && <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-600">No available providers are assigned to this service yet.</div>}
+                      {staffMembers.length === 0 && <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-600">No available providers are assigned to this service yet.</div>}
                       {staffMembers.map((staff) => (
                         <button
                           key={staff.id}
@@ -416,15 +416,15 @@ export default function BookingModal({
                             form.setValue("staffId", staff.id);
                             setErrorMessage(null);
                           }}
-                          className={`rounded-2xl border p-4 text-left transition ${
+                          className={`rounded-xl border p-4 text-left transition-all duration-200 ease-in-out ${
                             selectedStaffId === staff.id
-                              ? "border-violet-500 bg-violet-50 shadow-sm"
-                              : "border-slate-200 bg-white hover:border-violet-200 hover:bg-violet-50/30"
+                              ? "border-slate-500 bg-slate-50 shadow-sm"
+                              : "border-slate-200 bg-white hover:border-slate-400 hover:bg-emerald-50/30"
                           }`}
                         >
                           <div className="flex items-center justify-between gap-4">
                             <div>
-                              <div className="text-base font-bold text-slate-900">
+                              <div className="text-base font-semibold text-slate-900">
                                 {staff.name}
                               </div>
                               <div className="mt-1 text-sm text-slate-600">
@@ -448,7 +448,7 @@ export default function BookingModal({
               {step === 2 && (
                 <div className="space-y-5">
                   <div>
-                    <h4 className="text-lg font-bold text-slate-900">
+                    <h4 className="text-lg font-semibold text-slate-900">
                       Pick a date and time
                     </h4>
                     <p className="mt-1 text-sm text-slate-500">
@@ -457,7 +457,7 @@ export default function BookingModal({
                     </p>
                   </div>
 
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
                     <label
                       htmlFor="booking-date"
                       className="mb-2 block text-sm font-medium text-slate-700"
@@ -472,12 +472,12 @@ export default function BookingModal({
                       onChange={(event) =>
                         form.setValue("selectedDate", event.target.value)
                       }
-                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-violet-400"
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-slate-400"
                     />
                   </div>
 
                   <div className="grid grid-cols-4 gap-2 sm:grid-cols-7" aria-label="Quick date selection">
-                    {quickDates.map((date) => <button key={date} type="button" aria-label={`Select ${formatDate(date)}`} aria-pressed={selectedDate === date} onClick={() => form.setValue("selectedDate", date)} className={`rounded-xl border px-2 py-2 text-center text-xs transition ${selectedDate === date ? "border-violet-500 bg-violet-50 text-violet-800" : "border-slate-200 bg-white text-slate-600 hover:border-violet-300"}`}><span className="block font-bold">{new Date(`${date}T12:00:00`).toLocaleDateString(undefined, { weekday: "short" })}</span><span>{new Date(`${date}T12:00:00`).getDate()}</span></button>)}
+                    {quickDates.map((date) => <button key={date} type="button" aria-label={`Select ${formatDate(date)}`} aria-pressed={selectedDate === date} onClick={() => form.setValue("selectedDate", date)} className={`rounded-xl border px-2 py-2 text-center text-xs transition-all duration-200 ease-in-out ${selectedDate === date ? "border-slate-800 bg-slate-900 text-white shadow-sm" : "border-slate-200 bg-white text-slate-600 hover:border-slate-400"}`}><span className="block font-semibold">{new Date(`${date}T12:00:00`).toLocaleDateString(undefined, { weekday: "short" })}</span><span>{new Date(`${date}T12:00:00`).getDate()}</span></button>)}
                   </div>
 
                   {loadingSlots ? (
@@ -485,12 +485,12 @@ export default function BookingModal({
                       {Array.from({ length: 6 }).map((_, index) => (
                         <div
                           key={`slot-skeleton-${index}`}
-                          className="h-12 animate-pulse rounded-2xl bg-slate-200"
+                          className="h-12 skeleton-shimmer rounded-xl bg-slate-200"
                         />
                       ))}
                     </div>
                   ) : !selectedDate ? (
-                    <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">Choose a date to see live availability.</div>
+                    <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">Choose a date to see live availability.</div>
                   ) : slots.length > 0 ? (
                     <div className="grid grid-cols-2 gap-3">
                       {slots.map((slot) => (
@@ -500,12 +500,12 @@ export default function BookingModal({
                           aria-label={`Select ${slot.startTime} to ${slot.endTime}`}
                           aria-pressed={Boolean(selectedSlot && selectedSlot.startTime === slot.startTime && selectedSlot.endTime === slot.endTime)}
                           onClick={() => form.setValue("slot", slot)}
-                          className={`rounded-2xl border px-3 py-3 text-left text-sm transition ${
+                          className={`rounded-xl border px-3 py-3 text-left text-sm transition-all duration-200 ease-in-out ${
                             selectedSlot &&
                             selectedSlot.startTime === slot.startTime &&
                             selectedSlot.endTime === slot.endTime
-                              ? "border-violet-500 bg-violet-50 text-violet-700"
-                              : "border-slate-200 bg-white text-slate-700 hover:border-violet-200"
+                              ? "border-slate-800 bg-slate-900 text-white shadow-sm"
+                              : "border-slate-200 bg-white text-slate-700 hover:border-slate-400"
                           }`}
                         >
                           <div className="font-semibold">
@@ -518,7 +518,7 @@ export default function BookingModal({
                       ))}
                     </div>
                   ) : (
-                    <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
+                    <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
                       No available slots for this date. Please choose another
                       date.
                     </div>
@@ -529,7 +529,7 @@ export default function BookingModal({
               {step === 3 && (
                 <div className="space-y-4">
                   <div>
-                    <h4 className="text-lg font-bold text-slate-900">
+                    <h4 className="text-lg font-semibold text-slate-900">
                       Confirm your booking
                     </h4>
                     <p className="mt-1 text-sm text-slate-500">
@@ -538,11 +538,11 @@ export default function BookingModal({
                   </div>
 
                   <div className="grid gap-4 md:grid-cols-2">
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                      <div className="text-xs uppercase tracking-[0.18em] text-slate-400">
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                      <div className="text-xs tracking-wide text-slate-500">
                         Service
                       </div>
-                      <div className="mt-2 text-lg font-bold text-slate-900">
+                      <div className="mt-2 text-lg font-semibold text-slate-900">
                         {service.name}
                       </div>
                       <div className="mt-1 text-sm text-slate-600">
@@ -551,11 +551,11 @@ export default function BookingModal({
                       </div>
                     </div>
 
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                      <div className="text-xs uppercase tracking-[0.18em] text-slate-400">
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                      <div className="text-xs tracking-wide text-slate-500">
                         Staff
                       </div>
-                      <div className="mt-2 text-lg font-bold text-slate-900">
+                      <div className="mt-2 text-lg font-semibold text-slate-900">
                         {selectedStaff?.name}
                       </div>
                       <div className="mt-1 text-sm text-slate-600">
@@ -564,13 +564,13 @@ export default function BookingModal({
                     </div>
                   </div>
 
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                     <div className="flex items-center justify-between gap-4">
                       <div>
-                        <div className="text-xs uppercase tracking-[0.18em] text-slate-400">
+                        <div className="text-xs tracking-wide text-slate-500">
                           Booking time
                         </div>
-                        <div className="mt-2 text-base font-bold text-slate-900">
+                        <div className="mt-2 text-base font-semibold text-slate-900">
                           {selectedDate ? formatDate(selectedDate) : "—"}
                         </div>
                         <div className="text-sm text-slate-600">
@@ -580,13 +580,13 @@ export default function BookingModal({
                         </div>
                       </div>
 
-                      <Clock3 className="h-6 w-6 text-violet-600" />
+                      <Clock3 className="h-6 w-6 text-emerald-700" />
                     </div>
                   </div>
 
-                  <div className="rounded-2xl border border-violet-200 bg-violet-50/70 p-4">
-                    <h5 className="font-bold text-slate-900">Price estimate</h5>
-                    <dl className="mt-3 space-y-2 text-sm"><div className="flex justify-between text-slate-600"><dt>Service subtotal</dt><dd>${estimate.subtotal.toFixed(2)}</dd></div><div className="flex justify-between text-slate-600"><dt>Estimated taxes</dt><dd>${estimate.tax.toFixed(2)}</dd></div><div className="flex justify-between text-slate-600"><dt>Booking fee</dt><dd>${estimate.fee.toFixed(2)}</dd></div><div className="flex justify-between border-t border-violet-200 pt-2 text-base font-black text-slate-950"><dt>Estimated total</dt><dd>${estimate.total.toFixed(2)}</dd></div></dl>
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4">
+                    <h5 className="font-semibold text-slate-900">Price estimate</h5>
+                    <dl className="mt-3 space-y-2 text-sm"><div className="flex justify-between text-slate-600"><dt>Service subtotal</dt><dd>${estimate.subtotal.toFixed(2)}</dd></div><div className="flex justify-between text-slate-600"><dt>Estimated taxes</dt><dd>${estimate.tax.toFixed(2)}</dd></div><div className="flex justify-between text-slate-600"><dt>Booking fee</dt><dd>${estimate.fee.toFixed(2)}</dd></div><div className="flex justify-between border-t border-emerald-200 pt-2 text-base font-semibold text-slate-950"><dt>Estimated total</dt><dd>${estimate.total.toFixed(2)}</dd></div></dl>
                     <p className="mt-3 text-xs leading-5 text-slate-500">Final taxes or fees depend on your business configuration and are confirmed before payment.</p>
                   </div>
                 </div>
@@ -597,7 +597,7 @@ export default function BookingModal({
               <button
                 type="button"
                 onClick={onClose}
-                className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition-all duration-200 ease-in-out hover:bg-slate-50"
               >
                 Cancel
               </button>
@@ -607,7 +607,7 @@ export default function BookingModal({
                   <button
                     type="button"
                     onClick={handleBack}
-                    className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                    className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition-all duration-200 ease-in-out hover:bg-slate-50"
                   >
                     Back
                   </button>
@@ -618,7 +618,7 @@ export default function BookingModal({
                     type="button"
                     onClick={step === 3 ? handleSubmit : handleNext}
                     disabled={submitting}
-                    className="rounded-2xl bg-gradient-to-r from-violet-600 to-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="rounded-xl button-primary px-4 py-2.5 text-sm font-semibold text-white  transition-all duration-200 ease-in-out hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {submitting
                       ? "Processing..."

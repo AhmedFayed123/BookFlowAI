@@ -28,6 +28,7 @@ namespace BookFlowAI.Api.Controllers
         public async Task<ActionResult<IEnumerable<StaffProfileDto>>> GetAll([FromQuery] int? serviceId = null)
         {
             var query = _context.StaffMembers
+                .AsNoTracking()
                 .Where(s => s.IsAvailable)
                 .AsQueryable();
             if (serviceId.HasValue)
@@ -47,7 +48,10 @@ namespace BookFlowAI.Api.Controllers
                         .Select(b => (double?)b.Review!.Rating)
                         .Average() ?? 0,
                     s.IsAvailable,
-                    null
+                    s.StaffServices
+                        .Where(assignment => assignment.Service.IsActive && assignment.Service.BusinessCategory.IsActive)
+                        .Select(assignment => new AdminStaffServiceDto(assignment.ServiceId, assignment.Service.Name))
+                        .ToArray()
                 ))
                 .ToListAsync();
 
@@ -59,8 +63,7 @@ namespace BookFlowAI.Api.Controllers
         public async Task<ActionResult<StaffProfileDto>> GetById(int id)
         {
             var staff = await _context.StaffMembers
-                .Include(s => s.User)
-                .Include(s => s.Bookings).ThenInclude(b => b.Review)
+                .AsNoTracking()
                 .Where(s => s.Id == id)
                 .Where(s => s.IsAvailable)
                 .Select(s => new StaffProfileDto(
@@ -71,9 +74,12 @@ namespace BookFlowAI.Api.Controllers
                     s.User.PhoneNumber,
                     s.Specialties ?? string.Empty,
                     s.WorkingHours ?? string.Empty,
-                    s.Bookings.Where(b => b.Review != null).Select(b => b.Review!.Rating).DefaultIfEmpty(0).Average(),
+                    s.Bookings.Where(b => b.Review != null).Select(b => (double?)b.Review!.Rating).Average() ?? 0,
                     s.IsAvailable,
-                    null
+                    s.StaffServices
+                        .Where(assignment => assignment.Service.IsActive && assignment.Service.BusinessCategory.IsActive)
+                        .Select(assignment => new AdminStaffServiceDto(assignment.ServiceId, assignment.Service.Name))
+                        .ToArray()
                 ))
                 .FirstOrDefaultAsync();
 

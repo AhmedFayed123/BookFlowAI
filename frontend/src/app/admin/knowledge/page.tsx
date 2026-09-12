@@ -40,7 +40,8 @@ export default function AdminKnowledgePage() {
   }, [toast]);
 
   useEffect(() => {
-    void loadDocuments();
+    const timer = window.setTimeout(() => { void loadDocuments(); }, 0);
+    return () => window.clearTimeout(timer);
   }, [loadDocuments]);
 
   const handleFileSelect = (file: File | null) => {
@@ -131,7 +132,7 @@ export default function AdminKnowledgePage() {
         title="RAG knowledge management"
         description="Upload manuals, FAQs, and policy guidance so the AI assistant can answer customer questions with current business context."
         actions={
-          <div className="rounded-full border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-semibold text-violet-700">
+          <div className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700">
             {documents.length} documents
           </div>
         }
@@ -142,11 +143,11 @@ export default function AdminKnowledgePage() {
             className="space-y-5 rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm"
           >
             <div className="flex items-center gap-3">
-              <span className="rounded-2xl bg-violet-100 p-2 text-violet-700">
+              <span className="rounded-xl bg-emerald-100 p-2 text-emerald-700">
                 <UploadCloud className="h-5 w-5" />
               </span>
               <div>
-                <h2 className="text-xl font-black text-slate-900">
+                <h2 className="text-xl font-semibold text-slate-900">
                   Upload knowledge
                 </h2>
                 <p className="text-sm text-slate-500">
@@ -166,7 +167,7 @@ export default function AdminKnowledgePage() {
                 setIsDragging(false);
                 handleFileSelect(event.dataTransfer.files?.[0] ?? null);
               }}
-              className={`flex cursor-pointer flex-col items-center justify-center rounded-[28px] border-2 border-dashed p-6 text-center transition ${isDragging ? "border-violet-500 bg-violet-50" : "border-slate-300 bg-slate-50 hover:border-violet-400 hover:bg-violet-50/50"}`}
+              className={`flex cursor-pointer flex-col items-center justify-center rounded-[28px] border-2 border-dashed p-6 text-center transition-all duration-200 ease-in-out ${isDragging ? "border-emerald-600 bg-emerald-50" : "border-slate-300 bg-slate-50 hover:border-emerald-400 hover:bg-emerald-50/50"}`}
             >
               <input
                 type="file"
@@ -176,7 +177,7 @@ export default function AdminKnowledgePage() {
                   handleFileSelect(event.target.files?.[0] ?? null)
                 }
               />
-              <UploadCloud className="h-10 w-10 text-violet-600" />
+              <UploadCloud className="h-10 w-10 text-emerald-700" />
               <p className="mt-3 text-sm font-semibold text-slate-700">
                 Drop files here or click to browse
               </p>
@@ -190,13 +191,13 @@ export default function AdminKnowledgePage() {
                 value={title}
                 onChange={(event) => setTitle(event.target.value)}
                 placeholder="Knowledge title"
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-violet-400 focus:bg-white"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition-all duration-200 ease-in-out focus:border-slate-400 focus:bg-white"
               />
               <input
                 value={sourceName}
                 onChange={(event) => setSourceName(event.target.value)}
                 placeholder="Source name (policy manual, FAQ, etc.)"
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-violet-400 focus:bg-white"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition-all duration-200 ease-in-out focus:border-slate-400 focus:bg-white"
               />
             </div>
 
@@ -209,14 +210,14 @@ export default function AdminKnowledgePage() {
                 onChange={(event) => setContent(event.target.value)}
                 rows={8}
                 placeholder="Paste policy, FAQ, or business guidance here ..."
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-violet-400 focus:bg-white"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition-all duration-200 ease-in-out focus:border-slate-400 focus:bg-white"
               />
             </div>
 
             <button
               type="submit"
               disabled={uploading}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-violet-600 to-indigo-600 px-5 py-3 text-sm font-bold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-70"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl button-primary px-5 py-3 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-70"
             >
               {uploading ? (
                 <>
@@ -232,11 +233,11 @@ export default function AdminKnowledgePage() {
           <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-3">
-                <span className="rounded-2xl bg-slate-100 p-2 text-slate-700">
+                <span className="rounded-xl bg-slate-100 p-2 text-slate-700">
                   <BookOpenText className="h-5 w-5" />
                 </span>
                 <div>
-                  <h2 className="text-xl font-black text-slate-900">
+                  <h2 className="text-xl font-semibold text-slate-900">
                     Knowledge documents
                   </h2>
                   <p className="text-sm text-slate-500">
@@ -247,7 +248,7 @@ export default function AdminKnowledgePage() {
             </div>
 
             {loading ? (
-              <div className="mt-6 flex items-center gap-3 rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
+              <div className="mt-6 flex items-center gap-3 rounded-xl bg-slate-50 p-4 text-sm text-slate-600">
                 <Loader2 className="h-4 w-4 animate-spin" /> Loading knowledge
                 base...
               </div>
@@ -256,7 +257,7 @@ export default function AdminKnowledgePage() {
                 No knowledge documents have been uploaded yet.
               </div>
             ) : (
-              <div className="mt-6 overflow-hidden rounded-2xl border border-slate-200">
+              <div className="mt-6 overflow-hidden rounded-xl border border-slate-200">
                 <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
                   <thead className="bg-slate-50 text-slate-600">
                     <tr>
@@ -274,11 +275,11 @@ export default function AdminKnowledgePage() {
                       <tr key={document.id} className="align-top">
                         <td className="px-4 py-4">
                           <div className="flex items-start gap-3">
-                            <span className="mt-0.5 rounded-xl bg-violet-100 p-2 text-violet-700">
+                            <span className="mt-0.5 rounded-xl bg-emerald-100 p-2 text-emerald-700">
                               <FileText className="h-4 w-4" />
                             </span>
                             <div>
-                              <p className="font-bold text-slate-900">
+                              <p className="font-semibold text-slate-900">
                                 {document.title}
                               </p>
                               <p className="text-xs text-slate-500">
@@ -302,7 +303,7 @@ export default function AdminKnowledgePage() {
                           <button
                             type="button"
                             onClick={() => void handleDelete(document)}
-                            className="inline-flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 transition hover:bg-rose-100"
+                            className="inline-flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 transition-all duration-200 ease-in-out hover:bg-rose-100"
                           >
                             <Trash2 className="h-3.5 w-3.5" /> Delete
                           </button>

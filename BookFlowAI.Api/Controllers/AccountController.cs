@@ -31,8 +31,17 @@ namespace BookFlowAI.Api.Controllers
         [HttpPut("change-password")]
         public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request)
         {
+            if (string.IsNullOrWhiteSpace(request.CurrentPassword))
+                return BadRequest(new { message = "Current password is required." });
+            if (string.IsNullOrWhiteSpace(request.NewPassword) || request.NewPassword.Length < 8)
+                return BadRequest(new { message = "New password must be at least 8 characters." });
+            if (request.CurrentPassword == request.NewPassword)
+                return BadRequest(new { message = "New password must be different from the current password." });
+
             var result = await _authService.ChangePasswordAsync(UserId, request);
-            return result ? Ok(new { message = "تم تغيير كلمة المرور بنجاح." }) : BadRequest("كلمة المرور الحالية غير صحيحة.");
+            return result
+                ? Ok(new { success = true, message = "Password changed successfully." })
+                : BadRequest(new { message = "The current password is incorrect." });
         }
     }
 }

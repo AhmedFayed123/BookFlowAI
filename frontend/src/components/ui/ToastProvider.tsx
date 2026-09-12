@@ -13,7 +13,7 @@ const toneClasses: Record<ToastTone, string> = {
   success: "border-emerald-200 bg-emerald-50 text-emerald-900",
   error: "border-rose-200 bg-rose-50 text-rose-900",
   warning: "border-amber-200 bg-amber-50 text-amber-900",
-  info: "border-indigo-200 bg-indigo-50 text-indigo-900",
+  info: "border-emerald-200 bg-emerald-50 text-emerald-900",
 };
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
@@ -42,10 +42,10 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     <div className="pointer-events-none fixed right-4 top-4 z-[80] flex w-[min(24rem,calc(100vw-2rem))] flex-col gap-3" aria-live="polite">
       {toasts.map((item) => {
         const Icon = item.tone === "success" ? CheckCircle2 : item.tone === "info" ? Info : AlertTriangle;
-        return <div key={item.id} className={`pointer-events-auto flex items-start gap-3 rounded-2xl border p-4 shadow-xl backdrop-blur ${toneClasses[item.tone]}`} role={item.tone === "error" ? "alert" : "status"}>
+        return <div key={item.id} className={`pointer-events-auto flex items-start gap-3 soft-enter rounded-2xl border p-4 shadow-lg shadow-slate-900/10 backdrop-blur-md ${toneClasses[item.tone]}`} role={item.tone === "error" ? "alert" : "status"}>
           <Icon className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
           <p className="flex-1 text-sm font-medium leading-5">{item.message}</p>
-          <button type="button" onClick={() => remove(item.id)} className="rounded-lg p-1 opacity-60 transition hover:bg-black/5 hover:opacity-100" aria-label="Dismiss notification"><X className="h-4 w-4" /></button>
+          <button type="button" onClick={() => remove(item.id)} className="rounded-lg p-1 opacity-60 transition-all duration-200 ease-in-out hover:bg-black/5 hover:opacity-100" aria-label="Dismiss notification"><X className="h-4 w-4" /></button>
         </div>;
       })}
     </div>

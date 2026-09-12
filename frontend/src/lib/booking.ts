@@ -46,3 +46,10 @@ export function getSlotDurationMinutes(slot: AvailabilitySlotDto): number {
   if (end <= start) end = new Date(end.getTime() + 24 * 60 * 60 * 1000);
   return Math.round((end.getTime() - start.getTime()) / 60_000);
 }
+
+// The current .NET contract exposes offset-less schedule times (TimeSpan +
+// DateTime). Preserve the selected wall-clock slot instead of shifting it to UTC.
+export function toScheduleDateTime(date: string, time: string): string {
+  combineLocalDateAndTime(date, time);
+  return `${date}T${time.length === 5 ? time + ":00" : time}`;
+}

@@ -12,6 +12,7 @@ import { useSignalR } from "../../../hooks/useSignalR";
 import DashboardSummaryCards from "../../../components/dashboard/DashboardSummaryCards";
 import BookingsTable from "../../../components/dashboard/BookingsTable";
 import AnalyticsPanel from "../../../components/dashboard/AnalyticsPanel";
+import OperationsSnapshot from "../../../components/dashboard/OperationsSnapshot";
 import ProtectedRoute from "../../../components/auth/ProtectedRoute";
 import ConnectionStatusBadge from "../../../components/ui/ConnectionStatusBadge";
 import { useToast } from "../../../components/ui/ToastProvider";
@@ -116,7 +117,10 @@ export default function AdminDashboardPage() {
     }
   }, [toast]);
 
-  useEffect(() => { void loadBookings(); }, [loadBookings]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void loadBookings(); }, 0);
+    return () => window.clearTimeout(timer);
+  }, [loadBookings]);
 
   const handleSignalRNewBooking = (payload: BookingNotification) => {
     if (!payload?.bookingId) return;
@@ -234,7 +238,7 @@ export default function AdminDashboardPage() {
   return (
     <ProtectedRoute requiredRole="Admin">
       <WorkspaceShell role="Admin" eyebrow="Admin operations" title="Operations dashboard" description="Monitor demand, booking health, and team activity from one live command center." actions={<>
-            <Link href="/admin/staff" className="rounded-full border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-semibold text-violet-700">
+            <Link href="/admin/staff" className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700">
               Manage staff
             </Link>
             <button
@@ -249,7 +253,7 @@ export default function AdminDashboardPage() {
           </>}>
 
         {notice && (
-          <div className="rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-700">
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
             {notice}
           </div>
         )}
@@ -260,15 +264,16 @@ export default function AdminDashboardPage() {
           averageNoShowRisk={summary.averageNoShowRisk}
         />
 
+        <OperationsSnapshot />
         <AnalyticsPanel />
 
         {loading ? (
-          <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
-            <div className="animate-pulse space-y-4">
+          <div className="surface-card rounded-2xl p-8 shadow-sm">
+            <div className="skeleton-shimmer space-y-4">
               <div className="h-6 w-1/3 rounded-full bg-slate-200" />
-              <div className="h-12 w-full rounded-2xl bg-slate-200" />
-              <div className="h-12 w-full rounded-2xl bg-slate-200" />
-              <div className="h-12 w-full rounded-2xl bg-slate-200" />
+              <div className="h-12 w-full rounded-xl bg-slate-200" />
+              <div className="h-12 w-full rounded-xl bg-slate-200" />
+              <div className="h-12 w-full rounded-xl bg-slate-200" />
             </div>
           </div>
         ) : (

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { UserRole } from "../../lib/api";
+import AsyncState from "../ui/AsyncState";
 
 type ProtectedRouteProps = {
   children: React.ReactNode;
@@ -67,8 +68,8 @@ export default function ProtectedRoute({
 
   if (!isReady) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-100 text-slate-600">
-        Checking access…
+      <div className="hero-canvas flex min-h-screen items-center justify-center bg-background px-6">
+        <div className="w-full max-w-2xl"><AsyncState loading /></div>
       </div>
     );
   }

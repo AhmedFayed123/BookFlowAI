@@ -26,6 +26,7 @@ export interface ApiErrorPayload {
         message?: string;
     };
     detail?: string;
+    errors?: Record<string, string[]>;
 }
 
 export class ApiClientError extends Error {
@@ -103,6 +104,17 @@ export interface BusinessCategoryDto {
     description: string;
     isActive: boolean;
 }
+
+export interface CreateBusinessCategoryDto { name: string; slug?: string | null; description?: string | null }
+export interface UpdateBusinessCategoryDto extends CreateBusinessCategoryDto { isActive: boolean }
+export interface MessageResponse { message: string }
+export interface LiveBookingDto {
+    id: number; customerName: string; staffName: string; serviceName: string;
+    dateTime: string; status: BookingStatus; noShowProbability?: number | null; isActiveNow: boolean;
+}
+export interface LegacyCreateStaffDto { userId: number; specialties: string; workingHours: string }
+export interface LegacyUpdateStaffDto { specialties: string; workingHours: string }
+export interface ApproveDayOffDto { date: string; isApproved: boolean; adminComment?: string | null }
 
 export interface CreateServiceDto {
     businessCategoryId: number;
@@ -313,7 +325,7 @@ export interface NoShowRateDto {
 }
 
 export interface OverrideBookingDto {
-    status?: string;
+    status: BookingStatus;
     newDateTime?: string | null;
     newStaffId?: number | null;
 }
@@ -348,7 +360,7 @@ export interface NoShowPredictionRequest {
     customerId: number;
     totalPastBookings: number;
     pastNoShowsCount: number;
-    pastCancellationsCount?: number;
+    pastCancellationsCount: number;
     leadTimeDays: number;
     bookingHour: number;
     bookingDayOfWeek: number;
@@ -415,6 +427,7 @@ const AI_BASE_URL = process.env.NEXT_PUBLIC_AI_API_URL || "http://localhost:8000
 const api: AxiosInstance = axios.create({
     baseURL: API_BASE_URL,
     withCredentials: true,
+    timeout: 30000,
     headers: {
         "Content-Type": "application/json",
     },
@@ -480,9 +493,14 @@ const normalizeError = (error: AxiosError<unknown>): ApiClientError => {
     const payload = error.response?.data ?? { message: error.message };
 
     const structured = typeof payload === "object" && payload !== null ? payload as ApiErrorPayload : null;
-    const message = typeof payload === "string"
-        ? payload
-        : structured?.message ?? structured?.error?.message ?? structured?.detail ?? error.message;
+    const validationMessage = structured?.errors
+        ? Object.values(structured.errors).flat().find(Boolean)
+        : undefined;
+    const message = status === 0
+        ? error.code === "ECONNABORTED" ? "This request is taking longer than expected. Please try again." : "Cannot reach BookFlow. Check your connection and try again."
+        : typeof payload === "string"
+        ? status >= 500 ? "The service is temporarily unavailable. Please try again." : payload
+        : structured?.message ?? structured?.error?.message ?? structured?.detail ?? validationMessage ?? error.message;
 
     return new ApiClientError(status, String(message), payload);
 };
@@ -585,12 +603,12 @@ export const authApi = {
     },
 
     async revokeToken(token: string): Promise<boolean> {
-        const response = await api.post<{ success: boolean; message?: string }>("/auth/revoke-token", token);
+        const response = await api.post<{ success: boolean; message?: string }>("/auth/revoke-token", JSON.stringify(token));
         return response.data.success;
     },
 
     async logout(refreshToken: string): Promise<boolean> {
-        const response = await api.post<{ success: boolean; message?: string }>("/auth/logout", refreshToken);
+        const response = await api.post<{ success: boolean; message?: string }>("/auth/logout", JSON.stringify(refreshToken));
         return response.data.success;
     },
 };
@@ -602,8 +620,8 @@ export const accountApi = {
     },
 
     async updateProfile(data: UpdateProfileRequest): Promise<boolean> {
-        const response = await api.put<{ success?: boolean; message?: string }>("/account/me", data);
-        return response.data.success !== false;
+        const response = await api.put<boolean>("/account/me", data);
+        return response.data;
     },
 
     async changePassword(data: ChangePasswordRequest): Promise<boolean> {
@@ -687,6 +705,15 @@ export const businessCategoriesApi = {
         const response = await api.get<BusinessCategoryDto[]>("/business-categories", { params: { includeInactive } });
         return response.data;
     },
+    async create(data: CreateBusinessCategoryDto): Promise<BusinessCategoryDto> {
+        return (await api.post<BusinessCategoryDto>("/business-categories", data)).data;
+    },
+    async update(id: number, data: UpdateBusinessCategoryDto): Promise<void> {
+        await api.put(`/business-categories/${id}`, data);
+    },
+    async remove(id: number): Promise<void> {
+        await api.delete(`/business-categories/${id}`);
+    },
 };
 
 export const staffApi = {
@@ -718,6 +745,9 @@ export const staffApi = {
         });
         return response.data;
     },
+    async getTodayBookings(): Promise<StaffBookingItemDto[]> {
+        return (await api.get<StaffBookingItemDto[]>("/staff/my-bookings/today")).data;
+    },
 
     async requestDayOff(data: RequestDayOffDto): Promise<{ message: string; affectedBookings: number }> {
         const response = await api.put<{ message: string; affectedBookings: number }>("/staff/schedule/day-off", data);
@@ -732,12 +762,45 @@ export const aiApi = {
     },
 
     async getPrediction(data: NoShowPredictionRequest): Promise<NoShowPredictionResponse> {
-        const response = await api.post<NoShowPredictionResponse>("/ai/predict-no-show", data);
+        const response = await api.post<NoShowPredictionResponse>("/ai/chat/predict-no-show", data);
         return response.data;
     },
 };
 
 export const aiApiRaw = aiMicroserviceClient;
+
+// Compatibility endpoints. New admin screens use adminApi's atomic account,
+// capabilities, and shift workflow instead of these legacy mutations.
+export const legacyStaffApi = {
+    async create(data: LegacyCreateStaffDto): Promise<MessageResponse & { staffId: number }> {
+        return (await api.post<MessageResponse & { staffId: number }>("/staff", data)).data;
+    },
+    async update(id: number, data: LegacyUpdateStaffDto): Promise<MessageResponse> {
+        return (await api.put<MessageResponse>(`/staff/${id}`, data)).data;
+    },
+    async remove(id: number): Promise<MessageResponse> {
+        return (await api.delete<MessageResponse>(`/staff/${id}`)).data;
+    },
+    async addShift(id: number, data: StaffShiftInputDto): Promise<MessageResponse & { scheduleId: number }> {
+        return (await api.post<MessageResponse & { scheduleId: number }>(`/staff/${id}/schedule`, data)).data;
+    },
+    async approveDayOff(id: number, data: ApproveDayOffDto): Promise<MessageResponse> {
+        return (await api.put<MessageResponse>(`/staff/${id}/approve-day-off`, data)).data;
+    },
+};
+
+export async function endSession(): Promise<void> {
+    if (typeof window === "undefined") return;
+    const token = window.localStorage.getItem("refresh_token");
+    try {
+        if (token) await authApi.logout(token);
+    } finally {
+        clearAuthStorage();
+        window.localStorage.removeItem("bookflow_user");
+        window.localStorage.removeItem("bookflowai:chat:history");
+        window.localStorage.removeItem("bookflowai:chat:sessionId");
+    }
+}
 
 export const businessInfoApi = {
     async getInfo(): Promise<BusinessInfoDto[]> {
@@ -747,8 +810,8 @@ export const businessInfoApi = {
 };
 
 export const reviewsApi = {
-    async create(data: CreateReviewDto): Promise<ReviewDto> {
-        const response = await api.post<ReviewDto>("/reviews", data);
+    async create(data: CreateReviewDto): Promise<MessageResponse> {
+        const response = await api.post<MessageResponse>("/reviews", data);
         return response.data;
     },
 
@@ -764,13 +827,13 @@ export const adminApi = {
         return response.data;
     },
 
-    async getLiveBookings(): Promise<Array<Record<string, unknown>>> {
-        const response = await api.get<Array<Record<string, unknown>>>("/admin/bookings/live");
+    async getLiveBookings(): Promise<LiveBookingDto[]> {
+        const response = await api.get<LiveBookingDto[]>("/admin/bookings/live");
         return response.data;
     },
 
-    async getBookings(status?: string, date?: string): Promise<Array<Record<string, unknown>>> {
-        const response = await api.get<Array<Record<string, unknown>>>("/admin/bookings", {
+    async getBookings(status?: string, date?: string): Promise<AdminBookingDto[]> {
+        const response = await api.get<AdminBookingDto[]>("/admin/bookings", {
             params: { status, date },
         });
         return response.data;
@@ -812,6 +875,9 @@ export const adminApi = {
     async getStaff(): Promise<AdminStaffDto[]> {
         const response = await api.get<AdminStaffDto[]>("/admin/staff");
         return response.data;
+    },
+    async getStaffById(id: number): Promise<AdminStaffDto> {
+        return (await api.get<AdminStaffDto>(`/admin/staff/${id}`)).data;
     },
 
     async createStaff(data: AdminCreateStaffDto): Promise<AdminStaffDto> {

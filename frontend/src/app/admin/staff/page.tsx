@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import ActionIcon from "../../../components/ui/ActionIcon";
 import { useCallback, useEffect, useState } from "react";
 import ProtectedRoute from "../../../components/auth/ProtectedRoute";
 import {
@@ -62,7 +63,9 @@ export default function AdminStaffPage() {
     setNotice(null);
   };
 
-  const editStaff = (item: AdminStaffDto) => {
+  const editStaff = async (item: AdminStaffDto) => {
+    try { item = await adminApi.getStaffById(item.id); }
+    catch (caught) { setNotice(caught instanceof Error ? caught.message : "Unable to load provider details."); return; }
     setEditingId(item.id);
     setForm({
       name: item.name,
@@ -79,8 +82,22 @@ export default function AdminStaffPage() {
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
-    setSaving(true);
     setNotice(null);
+
+    if (form.serviceIds.length === 0) {
+      setNotice("Select at least one service for this provider.");
+      return;
+    }
+    if (form.shifts.length === 0) {
+      setNotice("Add at least one working shift.");
+      return;
+    }
+    if (form.shifts.some((shift) => !shift.startTime || !shift.endTime || shift.startTime >= shift.endTime)) {
+      setNotice("Each working shift must have a valid start time before its end time.");
+      return;
+    }
+
+    setSaving(true);
     try {
       if (editingId) {
         await adminApi.updateStaff(editingId, {
@@ -142,34 +159,34 @@ export default function AdminStaffPage() {
         <div className="mx-auto max-w-7xl space-y-6">
           <header className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-violet-600">Admin operations</p>
-              <h1 className="mt-2 text-3xl font-black text-slate-900">Staff & service providers</h1>
+              <p className="text-xs font-semibold tracking-wide text-emerald-700">Admin operations</p>
+              <h1 className="mt-2 text-3xl font-semibold text-slate-900">Staff & service providers</h1>
               <p className="mt-2 text-slate-600">Manage capabilities, working shifts, and booking availability.</p>
             </div>
             <Link href="/admin/dashboard" className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700">Back to dashboard</Link>
           </header>
 
-          {notice && <div className="rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-800">{notice}</div>}
+          {notice && <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{notice}</div>}
 
-          <form onSubmit={submit} className="space-y-5 rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm">
+          <form onSubmit={submit} className="space-y-5 surface-card rounded-2xl p-6 shadow-sm">
             <div className="flex items-center justify-between">
-              <h2 className="text-xl font-black text-slate-900">{editingId ? "Edit provider" : "Add provider"}</h2>
-              {editingId && <button type="button" onClick={resetForm} className="text-sm font-semibold text-violet-700">Cancel edit</button>}
+              <h2 className="text-xl font-semibold text-slate-900">{editingId ? "Edit provider" : "Add provider"}</h2>
+              {editingId && <button type="button" onClick={resetForm} className="text-sm font-semibold text-emerald-700"><ActionIcon action="cancel" />Cancel edit</button>}
             </div>
 
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-              <input required placeholder="Full name" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} className="rounded-2xl border border-slate-200 px-4 py-3" />
-              <input required type="email" placeholder="Email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} className="rounded-2xl border border-slate-200 px-4 py-3" />
-              {!editingId && <input required minLength={8} type="password" placeholder="Temporary password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} className="rounded-2xl border border-slate-200 px-4 py-3" />}
-              <input placeholder="Phone" value={form.phoneNumber ?? ""} onChange={(event) => setForm({ ...form, phoneNumber: event.target.value })} className="rounded-2xl border border-slate-200 px-4 py-3" />
-              <input placeholder="Skills / qualifications" value={form.specialties ?? ""} onChange={(event) => setForm({ ...form, specialties: event.target.value })} className="rounded-2xl border border-slate-200 px-4 py-3 md:col-span-2" />
+              <input required placeholder="Full name" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} className="rounded-xl border border-slate-200 px-4 py-3" />
+              <input required type="email" placeholder="Email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} className="rounded-xl border border-slate-200 px-4 py-3" />
+              {!editingId && <input required minLength={8} type="password" placeholder="Temporary password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} className="rounded-xl border border-slate-200 px-4 py-3" />}
+              <input placeholder="Phone" value={form.phoneNumber ?? ""} onChange={(event) => setForm({ ...form, phoneNumber: event.target.value })} className="rounded-xl border border-slate-200 px-4 py-3" />
+              <input placeholder="Skills / qualifications" value={form.specialties ?? ""} onChange={(event) => setForm({ ...form, specialties: event.target.value })} className="rounded-xl border border-slate-200 px-4 py-3 md:col-span-2" />
             </div>
 
             <fieldset>
-              <legend className="mb-3 text-sm font-bold text-slate-700">Assigned services</legend>
+              <legend className="mb-3 text-sm font-semibold text-slate-700">Assigned services</legend>
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 {services.map((service) => (
-                  <label key={service.id} className="flex items-center gap-3 rounded-2xl border border-slate-200 p-3 text-sm">
+                  <label key={service.id} className="flex items-center gap-3 rounded-xl border border-slate-200 p-3 text-sm">
                     <input type="checkbox" checked={form.serviceIds.includes(service.id)} onChange={() => setForm((current) => ({ ...current, serviceIds: current.serviceIds.includes(service.id) ? current.serviceIds.filter((id) => id !== service.id) : [...current.serviceIds, service.id] }))} />
                     <span><strong>{service.name}</strong><span className="block text-xs text-slate-500">{service.businessCategoryName}</span></span>
                   </label>
@@ -179,16 +196,16 @@ export default function AdminStaffPage() {
 
             <fieldset className="space-y-3">
               <div className="flex items-center justify-between">
-                <legend className="text-sm font-bold text-slate-700">Working shifts</legend>
-                <button type="button" onClick={() => setForm({ ...form, shifts: [...form.shifts, emptyShift()] })} className="text-sm font-semibold text-violet-700">+ Add shift</button>
+                <legend className="text-sm font-semibold text-slate-700">Working shifts</legend>
+                <button type="button" onClick={() => setForm({ ...form, shifts: [...form.shifts, emptyShift()] })} className="text-sm font-semibold text-emerald-700">+ Add shift</button>
               </div>
               {form.shifts.map((shift, index) => (
-                <div key={`${index}-${shift.dayOfWeek}`} className="grid gap-3 rounded-2xl bg-slate-50 p-3 sm:grid-cols-[1fr_1fr_1fr_auto]">
+                <div key={`${index}-${shift.dayOfWeek}`} className="grid gap-3 rounded-xl bg-slate-50 p-3 sm:grid-cols-[1fr_1fr_1fr_auto]">
                   <select value={shift.dayOfWeek} onChange={(event) => setForm({ ...form, shifts: form.shifts.map((item, itemIndex) => itemIndex === index ? { ...item, dayOfWeek: Number(event.target.value) } : item) })} className="rounded-xl border border-slate-200 bg-white px-3 py-2">
                     {days.map((day, dayIndex) => <option key={day} value={dayIndex}>{day}</option>)}
                   </select>
-                  <input type="time" value={shift.startTime.slice(0, 5)} onChange={(event) => setForm({ ...form, shifts: form.shifts.map((item, itemIndex) => itemIndex === index ? { ...item, startTime: `${event.target.value}:00` } : item) })} className="rounded-xl border border-slate-200 px-3 py-2" />
-                  <input type="time" value={shift.endTime.slice(0, 5)} onChange={(event) => setForm({ ...form, shifts: form.shifts.map((item, itemIndex) => itemIndex === index ? { ...item, endTime: `${event.target.value}:00` } : item) })} className="rounded-xl border border-slate-200 px-3 py-2" />
+                  <input required aria-label="Shift start time" type="time" value={shift.startTime.slice(0, 5)} onChange={(event) => setForm({ ...form, shifts: form.shifts.map((item, itemIndex) => itemIndex === index ? { ...item, startTime: event.target.value ? `${event.target.value}:00` : "" } : item) })} className="rounded-xl border border-slate-200 px-3 py-2" />
+                  <input required aria-label="Shift end time" type="time" value={shift.endTime.slice(0, 5)} onChange={(event) => setForm({ ...form, shifts: form.shifts.map((item, itemIndex) => itemIndex === index ? { ...item, endTime: event.target.value ? `${event.target.value}:00` : "" } : item) })} className="rounded-xl border border-slate-200 px-3 py-2" />
                   <button type="button" onClick={() => setForm({ ...form, shifts: form.shifts.filter((_, itemIndex) => itemIndex !== index) })} className="px-2 text-sm font-semibold text-rose-600">Remove</button>
                 </div>
               ))}
@@ -196,38 +213,38 @@ export default function AdminStaffPage() {
 
             <div className="flex flex-wrap items-center justify-between gap-4">
               <label className="flex items-center gap-2 text-sm font-semibold text-slate-700"><input type="checkbox" checked={form.isAvailable} onChange={(event) => setForm({ ...form, isAvailable: event.target.checked })} /> Available for booking</label>
-              <button disabled={saving} className="rounded-2xl bg-gradient-to-r from-violet-600 to-indigo-600 px-5 py-3 text-sm font-bold text-white disabled:opacity-50">{saving ? "Saving..." : editingId ? "Save changes" : "Create provider"}</button>
+              <button disabled={saving} className="rounded-xl button-primary px-5 py-3 text-sm font-semibold text-white disabled:opacity-50"><ActionIcon action="save" />{saving ? "Saving..." : editingId ? "Save changes" : "Create provider"}</button>
             </div>
           </form>
 
-          {timeOffRequests.length > 0 && <section className="rounded-[30px] border border-amber-200 bg-amber-50 p-6 shadow-sm">
-            <h2 className="text-xl font-black text-slate-900">Pending time-off requests</h2>
+          {timeOffRequests.length > 0 && <section className="rounded-2xl border border-amber-200 bg-amber-50 p-6 shadow-sm">
+            <h2 className="text-xl font-semibold text-slate-900">Pending time-off requests</h2>
             <div className="mt-4 grid gap-3 lg:grid-cols-2">
-              {timeOffRequests.map((request) => <article key={request.id} className="rounded-2xl border border-amber-200 bg-white p-4">
-                <h3 className="font-bold text-slate-900">{request.staffName}</h3>
+              {timeOffRequests.map((request) => <article key={request.id} className="rounded-xl border border-amber-200 bg-white p-4">
+                <h3 className="font-semibold text-slate-900">{request.staffName}</h3>
                 <p className="mt-1 text-sm text-slate-600">{new Date(request.date).toLocaleDateString()} · {request.reason || "No reason provided"}</p>
                 <div className="mt-3 flex gap-2">
-                  <button onClick={() => void reviewTimeOff(request, true)} className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-bold text-white">Approve</button>
-                  <button onClick={() => void reviewTimeOff(request, false)} className="rounded-lg bg-rose-600 px-3 py-2 text-sm font-bold text-white">Reject</button>
+                  <button onClick={() => void reviewTimeOff(request, true)} className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white">Approve</button>
+                  <button onClick={() => void reviewTimeOff(request, false)} className="rounded-lg bg-rose-600 px-3 py-2 text-sm font-semibold text-white">Reject</button>
                 </div>
               </article>)}
             </div>
           </section>}
 
-          <section className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm">
-            <h2 className="text-xl font-black text-slate-900">Provider directory</h2>
+          <section className="surface-card rounded-2xl p-6 shadow-sm">
+            <h2 className="text-xl font-semibold text-slate-900">Provider directory</h2>
             {loading ? <p className="mt-4 text-slate-500">Loading staff...</p> : (
               <div className="mt-4 grid gap-4 lg:grid-cols-2">
                 {staff.map((item) => (
-                  <article key={item.id} className="rounded-3xl border border-slate-200 p-5">
+                  <article key={item.id} className="rounded-2xl border border-slate-200 p-5">
                     <div className="flex items-start justify-between gap-3">
-                      <div><h3 className="font-black text-slate-900">{item.name}</h3><p className="text-sm text-slate-500">{item.email}</p></div>
-                      <button onClick={() => void toggleAvailability(item)} className={`rounded-full px-3 py-1 text-xs font-bold ${item.isAvailable ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-600"}`}>{item.isAvailable ? "Available" : "Unavailable"}</button>
+                      <div><h3 className="font-semibold text-slate-900">{item.name}</h3><p className="text-sm text-slate-500">{item.email}</p></div>
+                      <button onClick={() => void toggleAvailability(item)} className={`rounded-full px-3 py-1 text-xs font-semibold ${item.isAvailable ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-600"}`}>{item.isAvailable ? "Available" : "Unavailable"}</button>
                     </div>
                     <p className="mt-3 text-sm text-slate-600">{item.specialties || "No qualifications recorded."}</p>
-                    <div className="mt-3 flex flex-wrap gap-2">{item.services.map((service) => <span key={service.id} className="rounded-full bg-violet-50 px-2.5 py-1 text-xs text-violet-700">{service.name}</span>)}</div>
+                    <div className="mt-3 flex flex-wrap gap-2">{item.services.map((service) => <span key={service.id} className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs text-emerald-700">{service.name}</span>)}</div>
                     <div className="mt-3 text-xs text-slate-500">{item.shifts.length} configured shift{item.shifts.length === 1 ? "" : "s"}</div>
-                    <div className="mt-4 flex gap-3"><button onClick={() => editStaff(item)} className="text-sm font-bold text-violet-700">Edit</button><button onClick={() => void removeStaff(item)} className="text-sm font-bold text-rose-600">Delete</button></div>
+                    <div className="mt-4 flex gap-3"><button onClick={() => editStaff(item)} className="text-sm font-semibold text-emerald-700"><ActionIcon action="edit" />Edit</button><button onClick={() => void removeStaff(item)} className="text-sm font-semibold text-rose-600">Delete</button></div>
                   </article>
                 ))}
               </div>

@@ -1,11 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import ActionIcon from "../../components/ui/ActionIcon";
 import {
   aiApi,
   type ChatRequestDto,
   type ChatResponseDto,
 } from "../../lib/api";
+
+import { ChevronDown, ChevronUp, MessageCircle, RotateCcw, Send, Sparkles, ArrowUpRight } from "lucide-react";
 
 type ChatRole = "user" | "assistant";
 
@@ -13,6 +16,7 @@ type ChatMessage = {
   role: ChatRole;
   content: string;
   timestamp: string;
+  durationMs?: number;
 };
 
 const STORAGE_SESSION_KEY = "bookflowai:chat:sessionId";
@@ -135,372 +139,162 @@ const tryChatRequest = async (
   return aiApi.sendChatMessage(payload);
 };
 
+const quickActions = ["How to book?", "Services available", "Change or cancel a booking"];
+
 export default function AiChatWidget() {
-  const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [input, setInput] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [sessionId, setSessionId] = useState<string>("");
-  // Initialize empty on first render (server + client) to avoid SSR hydration
-  // mismatches. Load persisted history after mount in an effect.
+  const [sessionId, setSessionId] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [mounted, setMounted] = useState(false);
+  const [waitingSeconds, setWaitingSeconds] = useState(0);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
-  const lastAssistantMessage = useMemo(
-    () => messages.filter((m) => m.role === "assistant").slice(-1)[0],
-    [messages],
-  );
-
   useEffect(() => {
-    const timer = window.setTimeout(
-      () => setSessionId(getOrCreateSessionId()),
-      0,
-    );
+    const timer = window.setTimeout(() => {
+      try {
+        setMessages(getInitialMessages());
+        setSessionId(getOrCreateSessionId());
+      } catch {
+        setSessionId(createSessionId());
+      }
+      setMounted(true);
+    }, 0);
     return () => window.clearTimeout(timer);
   }, []);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem(
-      STORAGE_SESSION_KEY,
-      sessionId || getOrCreateSessionId(),
-    );
-  }, [sessionId]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem(STORAGE_HISTORY_KEY, JSON.stringify(messages));
-  }, [messages]);
-
-  // Load persisted messages after mount to avoid hydration mismatches
-  useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (!mounted) return;
     try {
-      const initial = getInitialMessages();
-      if (initial.length) setMessages(initial);
+      window.localStorage.setItem(STORAGE_SESSION_KEY, sessionId);
+      window.localStorage.setItem(STORAGE_HISTORY_KEY, JSON.stringify(messages));
     } catch {
-      // ignore
+      // Storage restrictions should not prevent a conversation.
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [mounted, messages, sessionId]);
 
   useEffect(() => {
-    setMounted(true);
-  }, []);
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [messages, isLoading, isMinimized]);
 
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [messages, isLoading]);
+    if (!isLoading) return;
+    const timer = window.setInterval(() => setWaitingSeconds((seconds) => seconds + 1), 1000);
+    return () => window.clearInterval(timer);
+  }, [isLoading]);
 
-  useEffect(() => {
-    if (isOpen && !isMinimized) {
-      setTimeout(() => inputRef.current?.focus(), 80);
-    }
-  }, [isOpen, isMinimized]);
-
-  const appendMessage = (role: ChatRole, content: string) => {
-    setMessages((current) => [
-      ...current,
-      {
-        role,
-        content,
-        timestamp: getTimestamp(),
-      },
-    ]);
-  };
-
-  const handleSend = async (retryText?: string) => {
-    const nextMessage = (retryText ?? input).trim();
-    if (!nextMessage || isLoading) return;
-
+  const handleSend = async (suggestion?: string, isRetry = false) => {
+    const text = (suggestion ?? input).trim();
+    if (!text || isLoading || !mounted) return;
     setError(null);
-    const userMessage = nextMessage;
     setInput("");
-    appendMessage("user", userMessage);
+    setWaitingSeconds(0);
     setIsLoading(true);
+    if (!isRetry) setMessages((current) => [...current, { role: "user", content: text, timestamp: getTimestamp() }]);
+    const started = performance.now();
 
     try {
-      const historyForRequest = messages
-        .slice(-12)
-        .map((message) => ({ role: message.role, content: message.content }));
-
-      const payload: ChatRequestDto = {
+      const response = await tryChatRequest({
         businessId: 1,
         sessionId,
-        message: userMessage,
-        conversationHistory: historyForRequest,
-      };
-
-      const response = await tryChatRequest(payload);
-      const assistantReply =
-        response.reply ||
-        "عذراً، لم أتمكن من الحصول على ردٍّ من المساعد الذكي في هذه اللحظة.";
-      const finalSessionId =
-        response.sessionId || sessionId || getOrCreateSessionId();
-      setSessionId(finalSessionId);
-      appendMessage("assistant", assistantReply);
-      setError(null);
+        message: text,
+        conversationHistory: (isRetry ? messages.slice(0, -1) : messages)
+          .slice(-12).map(({ role, content }) => ({ role, content })),
+      });
+      setSessionId(response.sessionId || sessionId);
+      setMessages((current) => [...current, {
+        role: "assistant",
+        content: response.reply || "I couldn't prepare a reply. Please try again.",
+        timestamp: getTimestamp(),
+        durationMs: performance.now() - started,
+      }]);
     } catch (requestError) {
-      const message =
-        requestError instanceof Error && requestError.message
-          ? requestError.message
-          : "تعذّر الوصول إلى خدمة الذكاء الاصطناعي. حاول مرة أخرى.";
-
-      setError(message);
-      appendMessage(
-        "assistant",
-        `تعذّر الاتصال بالخدمة الذكية. ${
-          message
-        }\n\nيمكنك إعادة المحاولة الآن أو إرسال الرسالة مرة أخرى.`,
-      );
+      setError(requestError instanceof Error ? requestError.message : "We couldn't reach the assistant. Please try again.");
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleRetry = () => {
-    const lastUserText = [...messages]
-      .reverse()
-      .find((m) => m.role === "user")?.content;
-    if (lastUserText) {
-      void handleSend(lastUserText);
-      return;
-    }
+  const retry = () => {
+    const lastMessage = [...messages].reverse().find((message) => message.role === "user");
+    if (lastMessage) void handleSend(lastMessage.content, true);
+  };
 
+  const reset = () => {
+    setMessages([]);
+    setSessionId(createSessionId());
     setError(null);
+    inputRef.current?.focus();
   };
 
   return (
-    <div className="fixed bottom-6 right-6 z-50">
-      {!isOpen && (
-        <button
-          type="button"
-          aria-label="Open AI assistant"
-          onClick={() => setIsOpen(true)}
-          className="group relative flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-violet-600 via-indigo-600 to-cyan-500 text-white shadow-[0_18px_45px_rgba(79,70,229,0.45)] transition-all duration-300 hover:scale-105 hover:shadow-[0_18px_50px_rgba(59,130,246,0.5)]"
-        >
-          <div className="absolute inset-0 animate-pulse rounded-full bg-white/10" />
-          <svg
-            viewBox="0 0 24 24"
-            className="relative h-7 w-7"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.8"
-          >
-            <path d="M12 4a4 4 0 0 1 4 4v2a4 4 0 0 1-8 0V8a4 4 0 0 1 4-4Z" />
-            <path d="M6 14c0-2.2 2.7-4 6-4s6 1.8 6 4v1.5A2.5 2.5 0 0 1 15.5 18h-7A2.5 2.5 0 0 1 6 15.5V14Z" />
-            <path d="M9 19h6" />
-          </svg>
-          <span className="absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full border-2 border-white bg-emerald-500 text-[9px] font-bold text-white">
-            AI
-          </span>
-        </button>
-      )}
+    <section className="surface-card overflow-hidden rounded-2xl" aria-label="BookFlow booking assistant">
+      <header className="flex items-center justify-between gap-3 border-b border-slate-200/80 px-5 py-4">
+        <div className="flex items-center gap-3">
+          <span className="grid h-9 w-9 place-items-center rounded-xl border border-slate-200 bg-slate-900 text-white"><MessageCircle className="h-4 w-4" /></span>
+          <div><h2 className="text-sm font-semibold text-slate-900">A little help with your booking</h2><p className="mt-0.5 text-xs text-slate-500">BookFlow assistant · AI-assisted guidance</p></div>
+        </div>
+        <div className="flex shrink-0 gap-1">
+          <button type="button" onClick={reset} disabled={isLoading || !mounted || messages.length === 0} aria-label="Start new conversation" title="Start new conversation" className="grid h-8 w-8 place-items-center rounded-lg text-slate-500 hover:bg-slate-50 disabled:opacity-30"><RotateCcw className="h-4 w-4" /></button>
+          <button type="button" onClick={() => setIsMinimized((value) => !value)} aria-label={isMinimized ? "Expand assistant" : "Collapse assistant"} aria-expanded={!isMinimized} aria-controls="booking-chat-body" className="grid h-8 w-8 place-items-center rounded-lg text-slate-500 hover:bg-slate-50">{isMinimized ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}</button>
+        </div>
+      </header>
 
-      <div
-        className={`absolute bottom-0 right-0 overflow-hidden rounded-3xl border border-slate-200/80 bg-white/95 shadow-[0_30px_80px_rgba(15,23,42,0.18)] backdrop-blur-xl transition-all duration-300 ${
-          isOpen
-            ? "visible w-[380px] translate-y-0 opacity-100"
-            : "invisible w-[380px] translate-y-4 opacity-0"
-        } ${isMinimized ? "h-[76px]" : "h-[560px]"}`}
-      >
-        <div className="flex items-center justify-between border-b border-slate-200 bg-gradient-to-r from-violet-600 via-indigo-600 to-blue-600 px-4 py-3 text-white">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white/15 ring-1 ring-white/20">
-              <svg
-                viewBox="0 0 24 24"
-                className="h-4 w-4"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.8"
-              >
-                <path d="M12 4a4 4 0 0 1 4 4v2a4 4 0 0 1-8 0V8a4 4 0 0 1 4-4Z" />
-                <path d="M6 14c0-2.2 2.7-4 6-4s6 1.8 6 4v1.5A2.5 2.5 0 0 1 15.5 18h-7A2.5 2.5 0 0 1 6 15.5V14Z" />
-              </svg>
-            </div>
-
-            <div>
-              <div className="text-sm font-semibold">BookFlow AI Assistant</div>
-              <div className="text-[11px] text-violet-100">
-                {isLoading ? "Thinking..." : "Online now"}
+      {!isMinimized && (
+        <div id="booking-chat-body">
+          <div ref={scrollRef} role="log" aria-label="Booking conversation" aria-live="polite" aria-relevant="additions" className="h-64 space-y-4 overflow-y-auto overscroll-contain bg-slate-50/70 px-5 py-5 sm:h-72">
+            {messages.length === 0 && (
+              <div className="soft-enter max-w-sm rounded-2xl border border-slate-200/80 bg-white/90 p-5 shadow-sm"><span className="mb-4 grid h-10 w-10 place-items-center rounded-xl border border-slate-200 bg-slate-50 text-slate-600"><Sparkles className="h-5 w-5" aria-hidden="true" /></span>
+                <p className="text-base font-medium leading-6 text-slate-800">Not sure where to start?</p>
+                <p className="mt-2 text-sm leading-6 text-slate-500">Ask about booking a service, choosing a provider, or managing your appointments. We can help you find the next step.</p>
+                <p className="mt-4 text-xs text-slate-500">Choose a question below, or ask in your own words.</p>
               </div>
-            </div>
+            )}
+
+            {messages.map((message, index) => (
+              <div key={message.timestamp + index} className={message.role === "user" ? "flex justify-end" : "flex justify-start"}>
+                <div className="max-w-[90%] min-w-0">
+                  <p className={`mb-1.5 text-xs font-medium ${message.role === "user" ? "text-right text-slate-500" : "text-emerald-800"}`}>{message.role === "user" ? "You" : "BookFlow"}</p>
+                  <div className={`rounded-xl border px-4 py-3 text-sm ${message.role === "user" ? "rounded-tr-sm border-slate-800 bg-slate-800 text-white" : "rounded-tl-sm border-slate-200 bg-white text-slate-700"}`}>
+                    <div dir="auto" className="break-words leading-6 [&_code]:rounded [&_code]:bg-slate-100 [&_code]:px-1 [&_code]:text-emerald-800 [&_strong]:font-semibold [&_ul]:list-disc [&_ul]:pl-5 [&_p]:mb-2 [&_p:last-child]:mb-0 [&_h3]:font-semibold" dangerouslySetInnerHTML={{ __html: renderMarkdown(message.content) }} />
+                  </div>
+                  <p className={`mt-1.5 text-[11px] text-slate-500 ${message.role === "user" ? "text-right" : ""}`}>
+                    {new Date(message.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                    {message.durationMs !== undefined && ` · Replied in ${(message.durationMs / 1000).toFixed(1)}s`}
+                  </p>
+                </div>
+              </div>
+            ))}
+
+            {isLoading && (
+              <div role="status" className="flex items-center gap-3 py-2 text-xs text-slate-500">
+                <span aria-hidden="true" className="flex gap-1">{[0, 1, 2].map((dot) => <span key={dot} className="h-1.5 w-1.5 typing-dot rounded-full bg-slate-500" style={{ animationDelay: `${dot * 180}ms` }} />)}</span>
+                Preparing your reply{waitingSeconds > 0 ? ` · ${waitingSeconds}s` : "…"}
+              </div>
+            )}
           </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setIsMinimized((value) => !value)}
-              className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-lg font-semibold transition hover:bg-white/20"
-              aria-label="Minimize chat"
-            >
-              {isMinimized ? "▢" : "—"}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setIsOpen(false);
-                setIsMinimized(false);
-              }}
-              className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-lg font-semibold transition hover:bg-white/20"
-              aria-label="Close chat"
-            >
-              ×
-            </button>
+          {error && (
+            <div role="alert" className="mx-5 mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+              <p>{error}</p><button type="button" onClick={retry} disabled={isLoading} className="mt-2 text-xs font-semibold underline underline-offset-4 disabled:opacity-40"><ActionIcon action="retry" />Retry last message</button>
+            </div>
+          )}
+
+          <div className="border-t border-slate-200/80 p-4">
+            <div className="mb-3 flex flex-wrap gap-2" aria-label="Suggested questions">
+              {quickActions.map((action) => <button key={action} type="button" onClick={() => void handleSend(action)} disabled={isLoading || !mounted} className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 transition-all duration-200 hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-800 disabled:opacity-40">{action}<ArrowUpRight className="h-3 w-3 opacity-50" aria-hidden="true" /></button>)}
+            </div>
+            <form onSubmit={(event) => { event.preventDefault(); void handleSend(); }} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white p-1.5 focus-within:border-slate-400 focus-within:ring-1 focus-within:ring-slate-400/20">
+              <input ref={inputRef} aria-label="Message the booking assistant" dir="auto" type="text" value={input} onChange={(event) => setInput(event.target.value)} placeholder="What can we help with?" className="min-w-0 flex-1 rounded-lg border-0 bg-transparent px-2 py-2 text-sm text-slate-800 outline-none placeholder:text-slate-500 focus-visible:outline-none" />
+              <button type="submit" disabled={!input.trim() || isLoading || !mounted} aria-label="Send message" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg button-primary text-white transition-all duration-200 hover:brightness-110 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-30"><Send className="h-4 w-4" /></button>
+            </form>
+            <p className="mt-3 text-[11px] leading-4 text-slate-500">AI guidance may be incomplete. Confirm details before booking.</p>
           </div>
         </div>
-
-        {!isMinimized && (
-          <>
-            <div
-              ref={scrollRef}
-              className="h-[420px] space-y-4 overflow-y-auto bg-slate-50 px-4 py-4"
-            >
-              {/* Render a stable placeholder on server and until client mount to avoid hydration mismatch */}
-              {!mounted && (
-                <div className="rounded-2xl bg-white p-4 text-sm text-slate-600 shadow-sm ring-1 ring-slate-200">
-                  Ask about services, pricing, or your booking schedule.
-                </div>
-              )}
-
-              {mounted && messages.length === 0 && (
-                <div className="rounded-2xl bg-white p-4 text-sm text-slate-600 shadow-sm ring-1 ring-slate-200">
-                  Ask about services, pricing, or your booking schedule.
-                </div>
-              )}
-
-              {mounted &&
-                messages.map((message, index) => (
-                  <div
-                    key={`${message.role}-${index}-${message.timestamp}`}
-                    className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
-                  >
-                    <div
-                      className={`flex max-w-[82%] items-start gap-2 ${message.role === "user" ? "flex-row-reverse" : ""}`}
-                    >
-                      <div
-                        className={`mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
-                          message.role === "user"
-                            ? "bg-gradient-to-br from-sky-500 to-cyan-500 text-white"
-                            : "bg-gradient-to-br from-violet-500 to-indigo-500 text-white"
-                        }`}
-                      >
-                        {message.role === "user" ? "YOU" : "AI"}
-                      </div>
-
-                      <div
-                        className={`rounded-2xl px-3 py-2 text-sm shadow-sm ring-1 ${
-                          message.role === "user"
-                            ? "bg-gradient-to-r from-sky-500 to-cyan-500 text-white ring-sky-400/30"
-                            : "bg-white text-slate-700 ring-slate-200"
-                        }`}
-                      >
-                        <div
-                          className="break-words leading-relaxed [&_code]:rounded [&_code]:bg-slate-100 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:text-[12px] [&_code]:text-violet-700 [&_strong]:font-semibold [&_em]:italic [&_ul]:list-disc [&_ul]:space-y-1 [&_ul]:pl-5 [&_p]:mb-2 [&_p:last-child]:mb-0 [&_h3]:mb-2 [&_h3]:text-base [&_h3]:font-semibold"
-                          dangerouslySetInnerHTML={{
-                            __html: renderMarkdown(message.content),
-                          }}
-                        />
-                        <div
-                          className={`mt-2 text-[10px] ${message.role === "user" ? "text-sky-100" : "text-slate-400"}`}
-                        >
-                          {new Date(message.timestamp).toLocaleTimeString([], {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-
-              {isLoading && (
-                <div className="flex justify-start">
-                  <div className="flex max-w-[82%] items-start gap-2">
-                    <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-indigo-500 text-[10px] font-bold text-white">
-                      AI
-                    </div>
-                    <div className="rounded-2xl bg-white px-3 py-3 text-sm text-slate-600 shadow-sm ring-1 ring-slate-200">
-                      <div className="flex items-center gap-2">
-                        <span className="h-2.5 w-2.5 animate-bounce rounded-full bg-violet-400 [animation-delay:-0.2s]" />
-                        <span className="h-2.5 w-2.5 animate-bounce rounded-full bg-violet-400 [animation-delay:-0.1s]" />
-                        <span className="h-2.5 w-2.5 animate-bounce rounded-full bg-violet-400" />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {error && !isLoading && (
-                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 shadow-sm">
-                  <div className="font-medium">
-                    Unable to reach the AI service
-                  </div>
-                  <div className="mt-1">{error}</div>
-                  <button
-                    type="button"
-                    onClick={handleRetry}
-                    className="mt-3 rounded-full bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-amber-500"
-                  >
-                    Retry last message
-                  </button>
-                </div>
-              )}
-            </div>
-
-            <div className="border-t border-slate-200 bg-white p-3">
-              <div className="flex items-end gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-2 shadow-inner">
-                <input
-                  ref={inputRef}
-                  type="text"
-                  value={input}
-                  onChange={(event) => setInput(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" && !event.shiftKey) {
-                      event.preventDefault();
-                      void handleSend();
-                    }
-                  }}
-                  placeholder="Ask BookFlow AI..."
-                  className="flex-1 border-0 bg-transparent px-2 py-2 text-sm text-slate-700 outline-none placeholder:text-slate-400"
-                />
-                <button
-                  type="button"
-                  disabled={!input.trim() || isLoading}
-                  onClick={() => void handleSend()}
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-md transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
-                  aria-label="Send message"
-                >
-                  <svg
-                    viewBox="0 0 24 24"
-                    className="h-4 w-4"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <path d="M5 12h13" />
-                    <path d="m13 5 7 7-7 7" />
-                  </svg>
-                </button>
-              </div>
-
-              <div className="mt-2 flex items-center justify-between text-[11px] text-slate-500">
-                <span>
-                  {sessionId
-                    ? `Session: ${sessionId.slice(0, 12)}...`
-                    : "New session"}
-                </span>
-                <span>{lastAssistantMessage ? "Context active" : "Ready"}</span>
-              </div>
-            </div>
-          </>
-        )}
-      </div>
-    </div>
+      )}
+    </section>
   );
 }

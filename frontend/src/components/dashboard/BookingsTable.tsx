@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 import { useMemo, useState } from "react";
 import { Search, SlidersHorizontal } from "lucide-react";
 import type { AdminBookingDto } from "../../lib/api";
@@ -89,31 +91,31 @@ export default function BookingsTable({
   }, [bookings, search, statusFilter]);
 
   return (
-    <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="surface-card rounded-2xl p-4 shadow-sm">
       <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <div className="text-xs font-semibold uppercase tracking-[0.22em] text-violet-600">
+          <div className="text-xs font-semibold tracking-wide text-emerald-700">
             Live bookings
           </div>
-          <h3 className="mt-2 text-xl font-bold text-slate-900">
+          <h3 className="mt-2 text-xl font-semibold text-slate-900">
             Bookings feed
           </h3>
         </div>
 
         <div className="flex flex-col gap-3 md:flex-row md:items-center">
-          <label className="relative"><span className="sr-only">Search bookings</span><Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <label className="relative"><span className="sr-only">Search bookings</span><Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
           <input
             type="text"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Search bookings"
-            className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-3 text-sm text-slate-700 outline-none focus:border-violet-400 md:w-64"
+            className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-3 text-sm text-slate-700 outline-none focus:border-slate-400 md:w-64"
           /></label>
 
-          <label className="relative"><span className="sr-only">Filter by status</span><SlidersHorizontal className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><select
+          <label className="relative"><span className="sr-only">Filter by status</span><SlidersHorizontal className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" /><select
             value={statusFilter}
             onChange={(event) => setStatusFilter(event.target.value)}
-            className="rounded-2xl border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-8 text-sm text-slate-700 outline-none focus:border-violet-400"
+            className="rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-8 text-sm text-slate-700 outline-none focus:border-slate-400"
           >
             <option value="All">All statuses</option>
             <option value="Pending">Pending</option>
@@ -128,7 +130,7 @@ export default function BookingsTable({
       <div className="mt-4 overflow-x-auto">
         <table className="min-w-full border-separate border-spacing-y-2 text-left">
           <thead>
-            <tr className="text-xs uppercase tracking-[0.18em] text-slate-400">
+            <tr className="text-xs tracking-wide text-slate-500">
               <th className="px-3 py-2 font-semibold">Customer</th>
               <th className="px-3 py-2 font-semibold">Service</th>
               <th className="px-3 py-2 font-semibold">Staff</th>
@@ -153,13 +155,13 @@ export default function BookingsTable({
               filteredBookings.map((booking) => (
                 <tr
                   key={booking.id}
-                  className="rounded-2xl bg-slate-50 text-sm text-slate-700 shadow-sm ring-1 ring-slate-200 transition-all duration-300 animate-[fadeIn_0.35s_ease]"
+                  className="rounded-xl bg-slate-50 text-sm text-slate-700 shadow-sm ring-1 ring-slate-200 transition-all duration-200 ease-in-out  animate-[fadeIn_0.35s_ease]"
                 >
                   <td className="rounded-l-2xl px-3 py-3">
                     <div className="font-semibold text-slate-900">
                       {booking.customerName}
                     </div>
-                    <div className="text-xs text-slate-500">#{booking.id}</div>
+                    <Link href={`/bookings/${booking.id}`} className="text-xs text-emerald-800 underline underline-offset-4">View #{booking.id}</Link>
                   </td>
 
                   <td className="px-3 py-3">
@@ -202,7 +204,7 @@ export default function BookingsTable({
                         onClick={() =>
                           void onStatusChange(booking.id, "confirm")
                         }
-                        className="rounded-xl bg-blue-600 px-2.5 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-500"
+                        className="rounded-xl bg-slate-700 px-2.5 py-1.5 text-xs font-semibold text-white transition-all duration-200 ease-in-out hover:bg-slate-800"
                       >
                         Confirm
                       </button>}
@@ -212,7 +214,7 @@ export default function BookingsTable({
                         onClick={() =>
                           void onStatusChange(booking.id, "complete")
                         }
-                        className="rounded-xl bg-emerald-600 px-2.5 py-1.5 text-xs font-semibold text-white transition hover:bg-emerald-500"
+                        className="rounded-xl bg-emerald-600 px-2.5 py-1.5 text-xs font-semibold text-white transition-all duration-200 ease-in-out hover:bg-emerald-500"
                       >
                         Complete
                       </button>}
@@ -220,7 +222,7 @@ export default function BookingsTable({
                       {(booking.status === "Pending" || booking.status === "Confirmed") && <button
                         type="button"
                         onClick={() => void onStatusChange(booking.id, "mark-no-show")}
-                        className="rounded-xl border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs font-semibold text-amber-800 transition hover:bg-amber-100"
+                        className="rounded-xl border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs font-semibold text-amber-800 transition-all duration-200 ease-in-out hover:bg-amber-100"
                       >
                         No-show
                       </button>}
@@ -228,7 +230,7 @@ export default function BookingsTable({
                       {(booking.status === "Pending" || booking.status === "Confirmed") && <button
                         type="button"
                         onClick={() => void onCancelBooking(booking.id)}
-                        className="rounded-xl bg-rose-600 px-2.5 py-1.5 text-xs font-semibold text-white transition hover:bg-rose-500"
+                        className="rounded-xl bg-rose-600 px-2.5 py-1.5 text-xs font-semibold text-white transition-all duration-200 ease-in-out hover:bg-rose-500"
                       >
                         Cancel
                       </button>}
