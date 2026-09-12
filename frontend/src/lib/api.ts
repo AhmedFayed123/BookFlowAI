@@ -1,4 +1,9 @@
 import axios, { AxiosError, AxiosInstance, InternalAxiosRequestConfig } from "axios";
+import { BOOKINGS_CHANGED_EVENT } from "./notifications";
+
+function notifyBookingsChanged() {
+    if (typeof window !== "undefined") window.dispatchEvent(new Event(BOOKINGS_CHANGED_EVENT));
+}
 
 export type BookingStatus =
     | "Pending"
@@ -648,16 +653,19 @@ export const bookingsApi = {
 
     async create(data: CreateBookingDto): Promise<{ message: string; bookingId: number }> {
         const response = await api.post<{ message: string; bookingId: number }>("/bookings", data);
+        notifyBookingsChanged();
         return response.data;
     },
 
     async reschedule(id: number, data: RescheduleBookingDto): Promise<{ message: string }> {
         const response = await api.put<{ message: string }>(`/bookings/${id}/reschedule`, data);
+        notifyBookingsChanged();
         return response.data;
     },
 
     async cancel(id: number): Promise<{ message: string }> {
         const response = await api.put<{ message: string }>(`/bookings/${id}/cancel`);
+        notifyBookingsChanged();
         return response.data;
     },
 
@@ -669,6 +677,7 @@ export const bookingsApi = {
         };
 
         const response = await api.put<{ message: string }>(endpointMap[status]);
+        notifyBookingsChanged();
         return response.data;
     },
 };
@@ -799,6 +808,7 @@ export async function endSession(): Promise<void> {
         window.localStorage.removeItem("bookflow_user");
         window.localStorage.removeItem("bookflowai:chat:history");
         window.localStorage.removeItem("bookflowai:chat:sessionId");
+        window.dispatchEvent(new Event("bookflow:profile-updated"));
     }
 }
 
@@ -841,6 +851,7 @@ export const adminApi = {
 
     async overrideBooking(id: number, data: OverrideBookingDto): Promise<{ message: string }> {
         const response = await api.put<{ message: string }>(`/admin/bookings/${id}/override`, data);
+        notifyBookingsChanged();
         return response.data;
     },
 

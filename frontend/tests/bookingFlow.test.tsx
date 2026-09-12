@@ -110,6 +110,7 @@ describe("critical booking interactions", () => {
   });
 
   it("completes provider, slot, review, and confirmation steps", async () => {
+    const dispatched = vi.spyOn(window, "dispatchEvent");
     const user = userEvent.setup();
     renderWithToasts(
       <BookingModal service={services[0]} open onClose={vi.fn()} />,
@@ -137,5 +138,9 @@ describe("critical booking interactions", () => {
 
     expect(await screen.findByText("#42")).toBeInTheDocument();
     expect(apiMocks.createBooking).toHaveBeenCalledTimes(1);
+    const confirmation = dispatched.mock.calls.map(([event]) => event).find((event) => event.type === "bookflow:notification") as CustomEvent | undefined;
+    expect(confirmation?.detail).toMatchObject({ kind: "booking", bookingId: 42, title: "Booking scheduled" });
+    expect(confirmation?.detail.message).toContain("Consultation");
+    expect(confirmation?.detail.message).toContain("Awaiting provider confirmation");
   });
 });

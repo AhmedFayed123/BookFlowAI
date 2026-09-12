@@ -14,6 +14,7 @@ import {
 import { calculateBookingEstimate } from "../../lib/serviceFilters";
 import { combineLocalDateAndTime, getUpcomingLocalDates, toLocalDateInputValue, toScheduleDateTime } from "../../lib/booking";
 import { useToast } from "../ui/ToastProvider";
+import { publishNotification, appointmentLabel } from "../../lib/notifications";
 
 const api = {
   staff: {
@@ -269,7 +270,9 @@ export default function BookingModal({
 
       setCreatedBookingId(response.bookingId);
       setStep(3);
-      toast("Your booking request was created successfully.", "success");
+      const message = `Your booking with ${service.name} was successfully scheduled. Awaiting provider confirmation.`;
+      publishNotification({ id: `booking-created:${response.bookingId}`, kind: "booking", title: "Booking scheduled", message, bookingId: response.bookingId, appointmentAt: toScheduleDateTime(selectedDate, selectedSlot?.startTime ?? ""), createdAt: new Date().toISOString() });
+      toast(`${service.name} · ${appointmentLabel(bookingDate.toISOString())}. Booking request created.`, "success");
     } catch (error) {
       const message =
         error instanceof Error

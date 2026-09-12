@@ -17,6 +17,7 @@ import { useEffect, useState } from "react";
 import { endSession, type UserRole } from "../../lib/api";
 import { useToast } from "./ToastProvider";
 import AccountBadge from "./AccountBadge";
+import NotificationCenter from "./NotificationCenter";
 
 const navigation: Record<
   UserRole,
@@ -119,6 +120,7 @@ export default function WorkspaceShell({
               );
             })}
           </nav>
+          <NotificationCenter />
           <div className="hidden shrink-0 md:block"><AccountBadge name={name === role ? undefined : name} role={role} /></div>
           <button
             type="button"

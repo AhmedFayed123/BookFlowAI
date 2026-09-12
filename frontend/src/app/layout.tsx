@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ToastProvider } from "../components/ui/ToastProvider";
+import { NotificationsProvider } from "../lib/useNotifications";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -25,7 +26,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full"><ToastProvider>{children}</ToastProvider></body>
+      <body className="min-h-full"><ToastProvider><NotificationsProvider>{children}</NotificationsProvider></ToastProvider></body>
     </html>
   );
 }

@@ -9,6 +9,7 @@ import AiChatWidget from "../components/chat/AiChatWidget";
 import ServiceList from "../components/booking/ServiceList";
 import BusinessInfo from "../components/booking/BusinessInfo";
 import AccountBadge from "../components/ui/AccountBadge";
+import NotificationCenter from "../components/ui/NotificationCenter";
 import { useToast } from "../components/ui/ToastProvider";
 import { endSession, type UserRole } from "../lib/api";
 
@@ -53,6 +54,7 @@ export default function HomePage() {
             <a href="#services" className="hidden text-sm font-medium text-slate-600 hover:text-emerald-800 sm:block">Services</a>
             {user ? (
               <>
+                <NotificationCenter />
                 <Link href={workspaceHref} className="rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">Workspace</Link>
                 <button type="button" disabled={signingOut} onClick={() => void logout()} className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40"><LogOut className="mr-1 inline h-3.5 w-3.5" aria-hidden="true" />Sign out</button>
               </>
