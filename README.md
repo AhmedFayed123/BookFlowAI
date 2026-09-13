@@ -450,7 +450,7 @@ Never include credentials, production data, or personal customer information in 
 
 Created by **Ahmed Fayed**.
 
-[GitHub](https://github.com/AhmedFayed123) · [LinkedIn](https://www.linkedin.com/in/ahmed-hesham-33572b245/) · [Repository](https://github.com/AhmedFayed123/BookFlowAI)
+[GitHub](https://github.com/AhmedFayed123) · [LinkedIn]([https://www.linkedin.com/in/ahmed-hesham-33572b245/](https://www.linkedin.com/in/ahmed-fayed-33572b245/)) · [Repository](https://github.com/AhmedFayed123/BookFlowAI)
 
 The LinkedIn address is listed on the author's [GitHub profile](https://github.com/AhmedFayed123).
 
