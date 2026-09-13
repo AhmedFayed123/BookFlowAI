@@ -29,6 +29,8 @@ public class BookingHub : Hub
                 await Groups.AddToGroupAsync(Context.ConnectionId, $"Staff_{staffId.Value}");
         }
 
+        if (TryGetUserId(out var customerId))
+            await Groups.AddToGroupAsync(Context.ConnectionId, $"Customer_{customerId}");
         await base.OnConnectedAsync();
     }
 

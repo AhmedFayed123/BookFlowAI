@@ -34,6 +34,21 @@ namespace BookFlowAI.Infrastructure
         {
             base.OnModelCreating(modelBuilder);
 
+            modelBuilder.Entity<Booking>(entity =>
+            {
+                entity.Property(b => b.PaymentStatus).HasConversion<string>().HasMaxLength(30);
+                // SQL datetime2 drops Kind; restore UTC when reading hold deadlines.
+                entity.Property(b => b.LockExpiresAt).HasConversion(
+                    new Microsoft.EntityFrameworkCore.Storage.ValueConversion.ValueConverter<DateTime, DateTime>(
+                        value => value, value => DateTime.SpecifyKind(value, DateTimeKind.Utc)));
+                entity.Property(b => b.InstaPayRefNumber).HasMaxLength(12);
+                entity.HasIndex(b => b.InstaPayRefNumber).IsUnique().HasFilter("[InstaPayRefNumber] IS NOT NULL");
+                entity.HasIndex(b => new { b.StaffId, b.DateTime });
+                entity.HasIndex(b => new { b.PaymentStatus, b.LockExpiresAt });
+                entity.Property(b => b.ReceiptImageUrl).HasMaxLength(200);
+                entity.Property(b => b.PaymentVerificationNote).HasMaxLength(500);
+            });
+
             // Booking Relationships
             modelBuilder.Entity<Booking>()
                 .HasOne(b => b.Customer)

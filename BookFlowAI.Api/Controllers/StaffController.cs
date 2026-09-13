@@ -122,7 +122,7 @@ namespace BookFlowAI.Api.Controllers
             // 2. جلب الحجوزات غير الملغاة لهذا اليوم
             var existingBookings = await _context.Bookings
                 .Include(b => b.Service)
-                .Where(b => b.StaffId == id && b.DateTime.Date == date.Date && b.Status != "Cancelled")
+                .Where(b => b.StaffId == id && b.DateTime.Date == date.Date && b.Status != "Cancelled" && (b.PaymentStatus != PaymentStatus.PendingInstaPay || b.LockExpiresAt > DateTime.UtcNow))
                 .ToListAsync();
 
             var slots = new List<AvailabilitySlotDto>();
@@ -381,7 +381,7 @@ namespace BookFlowAI.Api.Controllers
             if (dto.IsApproved)
             {
                 var affectedBookings = await _context.Bookings
-                    .Where(b => b.StaffId == id && b.DateTime.Date == dto.Date.Date && b.Status != "Cancelled")
+                    .Where(b => b.StaffId == id && b.DateTime.Date == dto.Date.Date && b.Status != "Cancelled" && (b.PaymentStatus != PaymentStatus.PendingInstaPay || b.LockExpiresAt > DateTime.UtcNow))
                     .ToListAsync();
 
                 foreach (var booking in affectedBookings)

@@ -128,6 +128,8 @@ namespace BookFlowAI.Api.Controllers
             var booking = await _context.Bookings.FindAsync(id);
             if (booking == null) return NotFound("الحجز غير موجود.");
 
+            if (booking.PaymentStatus != null) return Conflict(new { message = "Use the InstaPay verification workflow for payment bookings." });
+
             if (!string.IsNullOrWhiteSpace(dto.Status))
             {
                 booking.Status = dto.Status;

@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { authStorage, bookingsApi, staffApi, type UserRole } from "./api";
 import { useToast } from "../components/ui/ToastProvider";
 import { toLocalDateInputValue } from "./booking";
+import { useSignalR } from "../hooks/useSignalR";
 import { bookingReminders, BOOKINGS_CHANGED_EVENT, NOTIFICATION_EVENT, type AppNotification } from "./notifications";
 
 interface NotificationState {
@@ -24,6 +25,7 @@ export function NotificationsProvider({ children, mockNotifications }: { childre
   const { toast } = useToast();
   const [items, setItems] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(false);
+  const [listenForPayments, setListenForPayments] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const itemsRef = useRef<AppNotification[]>([]);
   const owner = useRef<{ key: string; role: UserRole } | null>(null);
@@ -55,7 +57,16 @@ export function NotificationsProvider({ children, mockNotifications }: { childre
         const prior = existing.get(item.id);
         return { ...item, createdAt: prior?.createdAt ?? item.createdAt, read: prior?.read, dismissed: prior?.dismissed };
       });
-      commit([...merged, ...itemsRef.current.filter((item) => item.kind !== "reminder")]);
+      const paymentUpdates: AppNotification[] = account.role === "Customer" ? bookings.filter((booking) =>
+        "paymentStatus" in booking && ["Confirmed", "Rejected"].includes(String(booking.paymentStatus))
+      ).map((booking) => ({
+        id: `instapay:${booking.id}:${"paymentStatus" in booking ? booking.paymentStatus : ""}`,
+        kind: "booking" as const, title: booking.status === "Cancelled" ? "InstaPay payment not confirmed" : "InstaPay payment approved",
+        message: booking.status === "Cancelled" ? "Your hold was released. Contact support about your transfer." : `${booking.serviceName}: your InstaPay payment and booking are confirmed.`,
+        bookingId: booking.id, createdAt: new Date().toISOString(),
+      })).filter((item) => !existing.has(item.id)) : [];
+      commit([...paymentUpdates, ...merged, ...itemsRef.current.filter((item) => item.kind !== "reminder")]);
+      paymentUpdates.forEach((item) => toast(item.message, item.title.includes("approved") ? "success" : "warning"));
       setError(null);
       const unreadNew = merged.filter((item) => !existing.has(item.id) && !item.read && !item.dismissed);
       if (unreadNew.length) toast(unreadNew.length === 1 ? unreadNew[0].message : `You have ${unreadNew.length} upcoming appointments.`, "info");
@@ -75,6 +86,7 @@ export function NotificationsProvider({ children, mockNotifications }: { childre
       const key = mockNotifications ? "bookflow:notifications:mock" : authStorage.hasActiveSession() && account?.email && role && ["Customer", "Staff", "Admin"].includes(role) ? `bookflow:notifications:${account.email.toLowerCase()}` : null;
       if (owner.current?.key === key) return;
       owner.current = key ? { key, role: role ?? "Customer" } : null;
+      setListenForPayments(Boolean(key && role === "Customer" && !mockNotifications));
       itemsRef.current = [];
       let stored: AppNotification[] = mockNotifications ?? [];
       if (key && !mockNotifications) {
@@ -111,6 +123,8 @@ export function NotificationsProvider({ children, mockNotifications }: { childre
       owner.current = null;
     };
   }, [pathname, commit, refresh, mockNotifications]);
+
+  useSignalR({ autoStart: listenForPayments, handlers: { ReceiveBookingUpdate: () => { void refresh(); window.dispatchEvent(new Event(BOOKINGS_CHANGED_EVENT)); } } });
 
   const notifications = items.filter((item) => !item.dismissed).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   return <NotificationsContext.Provider value={{ notifications, unreadCount: notifications.filter((item) => !item.read).length, loading, error, refresh,

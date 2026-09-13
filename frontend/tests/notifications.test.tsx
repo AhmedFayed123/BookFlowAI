@@ -6,6 +6,7 @@ import NotificationCenter from "../src/components/ui/NotificationCenter";
 import { appointmentLabel, bookingReminders, publishNotification, type AppNotification } from "../src/lib/notifications";
 
 const mocks = vi.hoisted(() => ({ bookings: vi.fn(), all: vi.fn(), staff: vi.fn(), toast: vi.fn(), active: true }));
+vi.mock("../src/hooks/useSignalR", () => ({ useSignalR: () => ({}) }));
 vi.mock("next/navigation", () => ({ usePathname: () => "/" }));
 vi.mock("../src/lib/api", () => ({ authStorage: { hasActiveSession: () => mocks.active }, bookingsApi: { getMyBookings: mocks.bookings, getAll: mocks.all }, staffApi: { getMyBookings: mocks.staff } }));
 vi.mock("../src/components/ui/ToastProvider", () => ({ useToast: () => ({ toast: mocks.toast }) }));
@@ -29,6 +30,17 @@ describe("reminder generation", () => {
 });
 
 describe("notification center", () => {
+  it("persists approval notifications and avoids duplicate success toasts on refresh", async () => {
+    const booking = { ...upcoming(), dateTime: new Date(Date.now() + 7 * 86400000).toISOString(), paymentStatus: "Confirmed" };
+    mocks.bookings.mockResolvedValue([booking]); mount();
+    await userEvent.click(await screen.findByRole("button", { name: "Notifications, 1 unread" }));
+    expect(screen.getByText("InstaPay payment approved")).toBeVisible();
+    expect(mocks.toast).toHaveBeenCalledWith(expect.stringContaining("payment and booking are confirmed"), "success");
+    act(() => window.dispatchEvent(new Event("bookflow:bookings-changed")));
+    await waitFor(() => expect(mocks.bookings.mock.calls.length).toBeGreaterThanOrEqual(2));
+    expect(mocks.toast).toHaveBeenCalledTimes(1);
+  });
+
   it("loads real reminders, opens the panel, and links to the booking", async () => {
     mocks.bookings.mockResolvedValue([upcoming()]); mount();
     const bell = await screen.findByRole("button", { name: "Notifications, 1 unread" });

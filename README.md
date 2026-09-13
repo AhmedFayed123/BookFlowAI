@@ -19,6 +19,7 @@
 <a href="#quick-start">Quick Start</a> ·
 <a href="#system-architecture">Architecture</a> ·
 <a href="#engineering-and-resilience">Engineering</a> ·
+<a href="#instapay-manual-payments">InstaPay</a> ·
 <a href="#development-and-verification">Development</a> ·
 <a href="https://github.com/AhmedFayed123/BookFlowAI/issues">Report an Issue</a>
 </p>
@@ -40,9 +41,10 @@ Built with enterprise-oriented engineering patterns, the repository combines a l
 
 - **AI conversational booking assistant** — Gemini-powered responses enriched by a ChromaDB RAG pipeline, with helpful local fallbacks when generation or retrieval is unavailable.
 - **Real-time availability & slot management** — service duration, provider schedules, time off, available slots, booking creation, cancellation, and rescheduling.
+- **InstaPay manual payments** — EGP checkout with a copyable business IPA/phone number, a unique 12-digit transfer reference, optional private receipt upload, 30-minute slot holds, and admin approval/rejection.
 - **Dynamic reminders & notifications** — a glassmorphic notification center, unread counts, upcoming appointment reminders, booking confirmations, read/dismiss actions, and Sonner action toasts.
 - **Modern glassmorphic dashboard** — responsive customer, staff, and admin workspaces with Geist typography, Lucide icons, loading skeletons, and refined feedback states.
-- **Live booking operations** — SignalR updates for administrator and staff booking workflows.
+- **Live booking operations** — SignalR updates for administrators, staff, and customer payment decisions, with notification polling to recover missed decisions.
 - **Business intelligence** — operational analytics, booking summaries, reviews, and Random Forest no-show risk prediction.
 - **Role-based accounts** — JWT authentication, refresh-token rotation, profile editing, and password management.
 
@@ -182,9 +184,73 @@ These accounts are seeded for development only. Never expose them publicly.
 | Admin | `admin@bookflow.com` | `Admin@123456` |
 | Customer | `customer@bookflow.com` | `Customer@123` |
 
-Sign in as a customer, choose a service, select a provider and available time, then confirm the booking request. Use the account page to change the profile or password.
+Configure the business InstaPay recipient first. Sign in as a customer, choose a service, provider, and available time, then transfer the displayed EGP amount and submit the InstaPay reference. Sign in as an admin to verify the transfer at `/admin/instapay`. Use the account page to change the profile or password.
 
 </details>
+
+## InstaPay Manual Payments
+
+Checkout uses manual transfer verification. Customers copy the configured business IPA or phone number, transfer the service price in EGP through InstaPay, and submit the **12-digit reference number** with an optional PNG/JPEG receipt (maximum **5 MB**). The slot is held only after submission.
+
+| Event | Booking status | Payment status | Slot availability |
+| --- | --- | --- | --- |
+| Customer submits payment details | `PendingInstaPay` | `PendingInstaPay` | Held for 30 minutes |
+| Admin approves an active hold | `Confirmed` | `Confirmed` | Reserved |
+| Admin rejects the transfer | `Cancelled` | `Rejected` | Released immediately |
+| Unverified hold expires | `Cancelled` | `Rejected` | Released at expiry |
+
+Customers see **⏳ Pending InstaPay verification** while verification is pending. Admins review the customer, provider, appointment time, amount, reference, and private receipt at `/admin/instapay`, then approve or reject with an optional audit note. Verify the reference, recipient, and amount against the business account history before approving. Rejected or expired transfers require manual support/refund handling.
+
+Approval and rejection trigger customer SignalR updates. Notification polling also detects final decisions after customers return, persists an in-app notification in their browser, displays a toast, and refreshes reminders. Email delivery is not configured.
+
+### Configuration
+
+Checkout stays disabled until `InstaPay:Recipient` is configured. For a host API in PowerShell:
+
+```powershell
+$env:InstaPay__Recipient = "your-business@instapay"
+$env:InstaPay__ReceiptStoragePath = "C:/BookFlowData/receipts"
+dotnet run --project BookFlowAI.Api
+```
+
+Replace the example recipient with the actual business IPA or phone number. Receipt storage defaults to `App_Data/receipts` under the API content root.
+
+The base Compose file does not forward InstaPay settings or persist receipts. Create a local `docker-compose.override.yml` to configure both:
+
+```yaml
+services:
+  webapi:
+    environment:
+      InstaPay__Recipient: "your-business@instapay"
+      InstaPay__ReceiptStoragePath: "/app/App_Data/receipts"
+    volumes:
+      - instapay_receipts:/app/App_Data/receipts
+
+volumes:
+  instapay_receipts:
+```
+
+Start or recreate the API with `docker compose up -d --build webapi`. For multiple API instances, use persistent shared receipt storage. Receipts are served through authenticated endpoints accessible only to the owning customer or an admin.
+
+### API and persistence
+
+| Method | Endpoint | Access / purpose |
+| --- | --- | --- |
+| `GET` | `/api/bookings/instapay-settings` | Customer: recipient, currency, hold duration, and enabled state |
+| `POST` | `/api/bookings/instapay` | Customer: multipart `staffId`, `serviceId`, `dateTime`, `instaPayRefNumber`, optional `receipt` |
+| `GET` | `/api/admin/instapay-pending` | Admin: active transfers awaiting verification |
+| `POST` | `/api/admin/bookings/{id}/verify-instapay` | Admin: `{ "approved": true, "note": "Matched transaction" }` |
+| `GET` | `/api/bookings/instapay-receipts/{name}` | Owning customer or admin: private receipt image |
+
+The `AddInstaPayVerification` EF migration adds payment status, reference, receipt URL, UTC hold deadline, and verification audit fields. Existing bookings retain a null payment status. Normal API startup applies pending migrations; controlled deployments can apply them explicitly:
+
+```bash
+dotnet ef database update --project BookFlowAI.Infrastructure --startup-project BookFlowAI.Api
+```
+
+Reference numbers are unique across all submissions, including rejected transfers. SQL Server transaction locks serialize slot creation, rescheduling, and payment approval per provider; expired holds no longer block availability. Repeated, cancelled, or expired review requests return a conflict. Existing status actions cannot confirm or complete unverified payments, and payment bookings cannot be rescheduled or administratively overridden through the legacy flow.
+
+See the [InstaPay implementation and setup guide](docs/instapay.md) for details.
 
 ## Project Structure
 
@@ -200,7 +266,7 @@ BookFlowAI/
 ├── BookFlowAI.Domain/            # Domain entities
 ├── BookFlowAI.Infrastructure/    # EF Core, migrations, auth, and AI clients
 ├── ai_service/                  # FastAPI, RAG, and ML inference
-├── docs/                        # API integration audit and notification guide
+├── docs/                        # API, notification, and InstaPay guides
 ├── scripts/                     # Development integration verification
 ├── image/README/                # Product screenshots
 ├── BookFlowAI.sln
@@ -221,7 +287,9 @@ docker exec bookflow_frontend npm test
 docker exec bookflow_frontend npx tsc --noEmit
 ```
 
-Frontend tests cover booking interactions, API payload contracts, profile/password management, assistant behavior, and notification eligibility, persistence, account isolation, and recovery.
+Frontend tests cover booking interactions, InstaPay checkout/reference validation, receipt selection, recipient copying, admin decisions and stale-review recovery, multipart API payload contracts, profile/password management, assistant behavior, and notification eligibility, persistence, account isolation, and recovery.
+
+The InstaPay implementation was checked with backend and frontend builds, TypeScript, migration drift detection, and 48 passing frontend tests. Live SQL Server concurrency verification remains to be exercised against a running database.
 
 For a frontend production-build check, use Node.js 20+ on the host. Stop the development server first if it shares this working directory:
 
@@ -279,6 +347,7 @@ These settings route browser AI requests through the .NET gateway, matching Comp
 ### API references
 
 - [API integration audit](docs/frontend-api-audit.md) — endpoint coverage and frontend mappings.
+- [InstaPay implementation and setup guide](docs/instapay.md) — checkout, verification endpoints, slot expiry, and private receipt storage.
 - [Notification implementation guide](docs/frontend-notifications.md) — data sources, state, mock fixtures, and limitations.
 - [Local Swagger UI](http://localhost:5000/swagger) — authentication, bookings, catalog, staff, administration, analytics, reviews, and AI gateway endpoints.
 - SignalR hub: `/hubs/bookings`.
@@ -309,8 +378,23 @@ docker compose down
 | SQL Server is unhealthy | SQL logs, password configuration, initialization time, memory, and the `sqlcmd` health probe |
 | API exits, including code 139 | Managed/native logs, runtime/image architecture, database initialization, stale images, and OOM status |
 | Frontend waits or shows an old build | API health, npm installation, the dependency volume, container restart, and browser hard refresh |
+| AI image build reports `files.pythonhosted.org` read timeout | Rebuild `ai_service`; its pip step uses a 300-second socket timeout, retries, resumable downloads, and a BuildKit download cache. Check Docker network/proxy connectivity if failures persist |
 | AI response fails or is slow | Gemini key/model availability, knowledge ingestion, external connectivity, and AI service logs |
 | Port is already allocated | Existing containers/processes on `3000`, `5000`, `8000`, or `1433` |
+
+For interrupted Python package downloads, retry only the AI image so completed build layers and cached downloads can be reused:
+
+```bash
+docker compose build ai_service
+```
+
+For particularly slow connections, override the build settings:
+
+```bash
+docker compose build --build-arg PIP_TIMEOUT=600 --build-arg PIP_RETRIES=15 --build-arg PIP_RESUME_RETRIES=15 ai_service
+```
+
+These settings follow [pip's network options](https://pip.pypa.io/en/stable/cli/pip/) and [Docker's cache mount guidance](https://docs.docker.com/build/cache/optimize/). Avoid `--no-cache` when retrying a download failure, so completed build layers remain reusable.
 
 For API crash diagnostics:
 
@@ -341,7 +425,8 @@ Before making this stack internet-facing:
 - [ ] Build immutable frontend/AI images; remove development bind mounts and use `next start` rather than `next dev`.
 - [ ] Configure HTTPS, secure token handling, environment-specific URLs, restrictive CORS, and Swagger access.
 - [ ] Run database migrations as a controlled deployment step rather than on every application startup.
-- [ ] Back up SQL Server, ChromaDB knowledge data, and data-protection keys; test restoration.
+- [ ] Configure the real InstaPay recipient and persistent receipt storage; verify approval, rejection, expiry, and concurrent slot submissions against SQL Server.
+- [ ] Back up SQL Server, private payment receipts, ChromaDB knowledge data, and data-protection keys; test restoration.
 - [ ] Add dependency-aware readiness checks, rate limiting, centralized logs, tracing, and operational alerting.
 - [ ] Audit and update application/runtime dependencies, including development test tooling.
 - [ ] Add CI gates for builds, tests, migration drift, dependency audits, and container scanning.

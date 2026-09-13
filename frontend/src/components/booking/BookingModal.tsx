@@ -5,16 +5,17 @@ import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 import { CalendarDays, Check, CheckCircle2, Clock3, ShieldCheck, UserRound, X } from "lucide-react";
 import {
-  bookingsApi,
+  instaPayApi,
   staffApi,
   type AvailabilitySlotDto,
   type ServiceDto,
   type StaffProfileDto,
 } from "../../lib/api";
-import { calculateBookingEstimate } from "../../lib/serviceFilters";
 import { combineLocalDateAndTime, getUpcomingLocalDates, toLocalDateInputValue, toScheduleDateTime } from "../../lib/booking";
 import { useToast } from "../ui/ToastProvider";
 import { publishNotification, appointmentLabel } from "../../lib/notifications";
+
+import InstaPayCard from "./InstaPayCard";
 
 const api = {
   staff: {
@@ -22,7 +23,7 @@ const api = {
     getAvailableSlots: staffApi.getAvailableSlots,
   },
   bookings: {
-    create: bookingsApi.create,
+    create: instaPayApi.create,
   },
 };
 
@@ -84,6 +85,9 @@ export default function BookingModal({
   const [loadingStaff, setLoadingStaff] = useState(false);
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [reference, setReference] = useState("");
+  const [receipt, setReceipt] = useState<File | null>(null);
+  const [paymentReady, setPaymentReady] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [createdBookingId, setCreatedBookingId] = useState<number | null>(null);
   const dialogRef = useRef<HTMLDivElement | null>(null);
@@ -103,9 +107,7 @@ export default function BookingModal({
   const selectedSlot = useWatch({ control: form.control, name: "slot" });
   const selectedDate = useWatch({ control: form.control, name: "selectedDate" });
   const quickDates = useMemo(() => getUpcomingLocalDates(7), []);
-  const configuredTaxRate = Number.isFinite(Number(process.env.NEXT_PUBLIC_TAX_RATE)) ? Number(process.env.NEXT_PUBLIC_TAX_RATE) : 0;
-  const configuredBookingFee = Number.isFinite(Number(process.env.NEXT_PUBLIC_BOOKING_FEE)) ? Math.max(0, Number(process.env.NEXT_PUBLIC_BOOKING_FEE)) : 0;
-  const estimate = calculateBookingEstimate(service?.price ?? 0, configuredTaxRate, configuredBookingFee);
+
 
   useEffect(() => {
     if (!open) return;
@@ -139,7 +141,7 @@ export default function BookingModal({
   useEffect(() => {
     if (!open) {
       const resetTimer = window.setTimeout(() => {
-        setStep(1);
+        setStep(1); setReference(""); setReceipt(null); setPaymentReady(false);
         setCreatedBookingId(null);
         setErrorMessage(null);
         form.reset({
@@ -255,6 +257,7 @@ export default function BookingModal({
   const handleSubmit = async () => {
     if (!service) return;
     if (!validateStep(2)) return;
+    if (!paymentReady || !/^[0-9]{12}$/.test(reference)) { setErrorMessage("Enter the 12-digit InstaPay reference number and wait for payment details to load."); return; }
 
     setSubmitting(true);
     setErrorMessage(null);
@@ -266,11 +269,11 @@ export default function BookingModal({
         staffId: form.getValues("staffId"),
         serviceId: service.id,
         dateTime: toScheduleDateTime(selectedDate, selectedSlot?.startTime ?? ""),
-      });
+      }, reference, receipt);
 
       setCreatedBookingId(response.bookingId);
       setStep(3);
-      const message = `Your booking with ${service.name} was successfully scheduled. Awaiting provider confirmation.`;
+      const message = `Your booking with ${service.name} was successfully scheduled. Awaiting InstaPay payment verification.`;
       publishNotification({ id: `booking-created:${response.bookingId}`, kind: "booking", title: "Booking scheduled", message, bookingId: response.bookingId, appointmentAt: toScheduleDateTime(selectedDate, selectedSlot?.startTime ?? ""), createdAt: new Date().toISOString() });
       toast(`${service.name} · ${appointmentLabel(bookingDate.toISOString())}. Booking request created.`, "success");
     } catch (error) {
@@ -317,8 +320,8 @@ export default function BookingModal({
                 <div className="flex items-center gap-4">
                   <span className="grid h-12 w-12 place-items-center rounded-full bg-emerald-600 text-white"><CheckCircle2 className="h-7 w-7" /></span>
                   <div>
-                  <p className="text-sm font-semibold tracking-wide text-emerald-700">
-                    Booking confirmed
+                  <p className="inline-flex rounded-full bg-amber-100 px-3 py-1 text-sm font-semibold text-amber-900">
+                    ⏳ Pending InstaPay verification
                   </p>
                   <h4 className="mt-2 text-3xl font-semibold text-slate-900">
                     #{createdBookingId}
@@ -337,8 +340,7 @@ export default function BookingModal({
                   {service.name}
                 </div>
                 <div className="mt-1 text-sm text-slate-600">
-                  {service.durationInMinutes} minutes • $
-                  {service.price.toFixed(2)}
+                  {service.durationInMinutes} minutes · EGP {service.price.toFixed(2)}
                 </div>
               </div>
 
@@ -533,7 +535,7 @@ export default function BookingModal({
                 <div className="space-y-4">
                   <div>
                     <h4 className="text-lg font-semibold text-slate-900">
-                      Confirm your booking
+                      Submit your InstaPay payment
                     </h4>
                     <p className="mt-1 text-sm text-slate-500">
                       Review the information before submitting your request.
@@ -549,8 +551,7 @@ export default function BookingModal({
                         {service.name}
                       </div>
                       <div className="mt-1 text-sm text-slate-600">
-                        {service.durationInMinutes} min • $
-                        {service.price.toFixed(2)}
+                        {service.durationInMinutes} min · EGP {service.price.toFixed(2)}
                       </div>
                     </div>
 
@@ -587,11 +588,7 @@ export default function BookingModal({
                     </div>
                   </div>
 
-                  <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4">
-                    <h5 className="font-semibold text-slate-900">Price estimate</h5>
-                    <dl className="mt-3 space-y-2 text-sm"><div className="flex justify-between text-slate-600"><dt>Service subtotal</dt><dd>${estimate.subtotal.toFixed(2)}</dd></div><div className="flex justify-between text-slate-600"><dt>Estimated taxes</dt><dd>${estimate.tax.toFixed(2)}</dd></div><div className="flex justify-between text-slate-600"><dt>Booking fee</dt><dd>${estimate.fee.toFixed(2)}</dd></div><div className="flex justify-between border-t border-emerald-200 pt-2 text-base font-semibold text-slate-950"><dt>Estimated total</dt><dd>${estimate.total.toFixed(2)}</dd></div></dl>
-                    <p className="mt-3 text-xs leading-5 text-slate-500">Final taxes or fees depend on your business configuration and are confirmed before payment.</p>
-                  </div>
+                  <InstaPayCard amount={service.price} reference={reference} receipt={receipt} onReference={setReference} onReceipt={setReceipt} onReady={setPaymentReady} />
                 </div>
               )}
             </div>
@@ -620,13 +617,13 @@ export default function BookingModal({
                   <button
                     type="button"
                     onClick={step === 3 ? handleSubmit : handleNext}
-                    disabled={submitting}
+                    disabled={submitting || (step === 3 && !paymentReady)}
                     className="rounded-xl button-primary px-4 py-2.5 text-sm font-semibold text-white  transition-all duration-200 ease-in-out hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {submitting
                       ? "Processing..."
                       : step === 3
-                        ? "Confirm booking"
+                        ? "Submit InstaPay payment"
                         : "Continue"}
                   </button>
                 )}

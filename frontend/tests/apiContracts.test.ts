@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { InternalAxiosRequestConfig } from "axios";
-import { accountApi, aiApi, api, authApi, businessCategoriesApi, reviewsApi } from "../src/lib/api";
+import { accountApi, aiApi, api, authApi, instaPayApi, businessCategoriesApi, reviewsApi } from "../src/lib/api";
 import { toScheduleDateTime } from "../src/lib/booking";
 
 const requests: InternalAxiosRequestConfig[] = [];
@@ -36,6 +36,24 @@ describe(".NET API request contracts", () => {
     await authApi.logout("test-refresh-token");
     expect(requests[0].url).toBe("/auth/logout");
     expect(JSON.parse(requests[0].data)).toBe("test-refresh-token");
+  });
+  it("sends InstaPay reference and optional receipt as multipart form data", async () => {
+    const receipt = new File(["receipt"], "receipt.png", { type: "image/png" });
+    await instaPayApi.create({ staffId: 8, serviceId: 1, dateTime: "2099-01-05T09:00:00" }, "123456789012", receipt);
+    expect(requests[0].url).toBe("/bookings/instapay");
+    expect(requests[0].data).toBeInstanceOf(FormData);
+    expect(requests[0].data.get("instaPayRefNumber")).toBe("123456789012");
+    expect(requests[0].data.get("receipt").name).toBe("receipt.png");
+    expect(requests[0].data.get("dateTime")).toBe("2099-01-05T09:00:00");
+  });
+  it("uses dedicated admin verification endpoints with an explicit decision", async () => {
+    await instaPayApi.pending(); await instaPayApi.verify(42, false, "Reference not found");
+    expect(requests.map((request) => [request.method, request.url])).toEqual([["get", "/admin/instapay-pending"], ["post", "/admin/bookings/42/verify-instapay"]]);
+    expect(JSON.parse(requests[1].data)).toEqual({ approved: false, note: "Reference not found" });
+  });
+  it("rejects receipt URLs outside the private API path before making an authenticated request", async () => {
+    await expect(instaPayApi.receipt("https://example.com/receipt.png")).rejects.toThrow("Invalid receipt URL");
+    expect(requests).toHaveLength(0);
   });
   it("does not shift an offset-less schedule slot to UTC", () => {
     expect(toScheduleDateTime("2099-01-05", "09:00:00")).toBe("2099-01-05T09:00:00");
