@@ -12,6 +12,7 @@ const apiMocks = vi.hoisted(() => ({
   getStaff: vi.fn(),
   getAvailableSlots: vi.fn(),
   createBooking: vi.fn(),
+  settings: vi.fn(),
 }));
 
 vi.mock("../src/lib/api", () => ({
@@ -21,7 +22,7 @@ vi.mock("../src/lib/api", () => ({
     getStaff: apiMocks.getStaff,
     getAvailableSlots: apiMocks.getAvailableSlots,
   },
-  bookingsApi: { create: apiMocks.createBooking },
+  instaPayApi: { create: apiMocks.createBooking, settings: apiMocks.settings },
 }));
 
 const services: ServiceDto[] = [
@@ -55,6 +56,7 @@ const renderWithToasts = (node: React.ReactNode) =>
 describe("critical booking interactions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    apiMocks.settings.mockResolvedValue({ recipient: "bookflow@instapay", enabled: true, currency: "EGP", lockMinutes: 30 });
     apiMocks.getServices.mockResolvedValue(services);
     apiMocks.getStaff.mockResolvedValue([
       {
@@ -128,19 +130,20 @@ describe("critical booking interactions", () => {
     );
     await user.click(screen.getByRole("button", { name: "Continue" }));
 
-    expect(screen.getByText("Price estimate")).toBeInTheDocument();
-    const dialog = screen.getByRole("dialog");
-    const totalDt = within(dialog).getByText("Estimated total");
-    const totalDd = totalDt.parentElement?.querySelector("dd");
-    expect(totalDd).toBeTruthy();
-    expect(totalDd).toHaveTextContent("$80.00");
-    await user.click(screen.getByRole("button", { name: "Confirm booking" }));
+    expect(await screen.findByText("bookflow@instapay")).toBeInTheDocument();
+    expect(within(screen.getByRole("dialog")).getByText("EGP 80.00")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Submit InstaPay payment" }));
+    expect(apiMocks.createBooking).not.toHaveBeenCalled();
+    await user.type(screen.getByLabelText("InstaPay reference number"), "123456789012");
+    await user.click(screen.getByRole("button", { name: "Submit InstaPay payment" }));
 
     expect(await screen.findByText("#42")).toBeInTheDocument();
     expect(apiMocks.createBooking).toHaveBeenCalledTimes(1);
+    expect(apiMocks.createBooking).toHaveBeenCalledWith(expect.objectContaining({ staffId: 8, serviceId: 1 }), "123456789012", null);
+    expect(screen.getByText("⏳ Pending InstaPay verification")).toBeInTheDocument();
     const confirmation = dispatched.mock.calls.map(([event]) => event).find((event) => event.type === "bookflow:notification") as CustomEvent | undefined;
     expect(confirmation?.detail).toMatchObject({ kind: "booking", bookingId: 42, title: "Booking scheduled" });
     expect(confirmation?.detail.message).toContain("Consultation");
-    expect(confirmation?.detail.message).toContain("Awaiting provider confirmation");
+    expect(confirmation?.detail.message).toContain("Awaiting InstaPay payment verification");
   });
 });

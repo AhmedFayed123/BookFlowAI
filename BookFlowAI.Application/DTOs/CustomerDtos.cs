@@ -65,7 +65,12 @@
         int DurationInMinutes,
         decimal Price,
         string Status,
-        double? NoShowProbability
+        double? NoShowProbability,
+        string? PaymentStatus = null,
+        string? InstaPayRefNumber = null,
+        string? ReceiptImageUrl = null,
+        DateTime? LockExpiresAt = null,
+        string? PaymentVerificationNote = null
     );
 
     public record AvailabilitySlotDto(

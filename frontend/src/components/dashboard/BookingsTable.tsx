@@ -17,6 +17,7 @@ type BookingsTableProps = {
 
 const getStatusClasses = (status: string) => {
   switch (status) {
+    case "PendingInstaPay":
     case "Pending":
       return "bg-amber-100 text-amber-700 ring-amber-200";
     case "Confirmed":
@@ -118,6 +119,7 @@ export default function BookingsTable({
             className="rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-8 text-sm text-slate-700 outline-none focus:border-slate-400"
           >
             <option value="All">All statuses</option>
+            <option value="PendingInstaPay">Pending InstaPay</option>
             <option value="Pending">Pending</option>
             <option value="Confirmed">Confirmed</option>
             <option value="Completed">Completed</option>
@@ -183,7 +185,7 @@ export default function BookingsTable({
                     <span
                       className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${getStatusClasses(booking.status)}`}
                     >
-                      {booking.status}
+                      {booking.status === "PendingInstaPay" ? "⏳ Pending InstaPay verification" : booking.status}
                     </span>
                   </td>
 

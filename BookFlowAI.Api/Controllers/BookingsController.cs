@@ -13,7 +13,7 @@ namespace BookFlowAI.Api.Controllers
     [Authorize]
     [ApiController]
     [Route("api/bookings")]
-    public class BookingsController : ControllerBase
+    public partial class BookingsController : ControllerBase
     {
         private readonly IApplicationDbContext _context;
         private readonly IAiServiceClient _aiServiceClient;
@@ -39,10 +39,14 @@ namespace BookFlowAI.Api.Controllers
         // POST /api/bookings
         [Authorize(Roles = "Customer")]
         [HttpPost]
-        public async Task<IActionResult> CreateBooking([FromBody] CreateBookingDto request)
+        public Task<IActionResult> CreateBooking([FromBody] CreateBookingDto request) => CreateBookingCore(request);
+
+        private async Task<IActionResult> CreateBookingCore(CreateBookingDto request, string? reference = null, IFormFile? receipt = null)
         {
             if (!TryGetCurrentUserId(out var customerId)) return Unauthorized();
             if (request.DateTime <= DateTime.Now) return BadRequest(new { message = "Booking time must be in the future." });
+
+            await using var transaction = await BeginSlotTransaction(request.StaffId);
 
             var service = await _context.Services
                 .FirstOrDefaultAsync(item => item.Id == request.ServiceId && item.IsActive && item.BusinessCategory.IsActive);
@@ -57,6 +61,7 @@ namespace BookFlowAI.Api.Controllers
                 return BadRequest(new { message = "The selected provider is not assigned to this service." });
 
             var bookingEnd = request.DateTime.AddMinutes(service.DurationInMinutes);
+            if (bookingEnd.Date != request.DateTime.Date) return BadRequest(new { message = "Bookings cannot cross the provider shift day." });
             var bookingStartTime = request.DateTime.TimeOfDay;
             var bookingEndTime = bookingEnd.TimeOfDay;
             var isWithinShift = await _context.StaffSchedules.AnyAsync(schedule =>
@@ -73,10 +78,11 @@ namespace BookFlowAI.Api.Controllers
             var hasConflict = await _context.Bookings.AnyAsync(b =>
                 b.StaffId == request.StaffId &&
                 b.Status != "Cancelled" &&
+                (b.PaymentStatus != PaymentStatus.PendingInstaPay || b.LockExpiresAt > DateTime.UtcNow) &&
                 b.DateTime < bookingEnd &&
                 b.DateTime.AddMinutes(b.Service.DurationInMinutes) > request.DateTime);
 
-            if (hasConflict) return BadRequest("الموعد المطلوب يتعارض مع حجز آخر للموظف.");
+            if (hasConflict) return Conflict(new { message = "The selected slot has already been booked. Choose another time." });
 
             // 2. حساب تفاصيل سجل الحجوزات السابقة للعميل
             var pastBookings = await _context.Bookings
@@ -91,7 +97,7 @@ namespace BookFlowAI.Api.Controllers
                 : null;
 
             // 3. حساب احتمالية عدم الحضور عبر AI Engine (إرسال الـ 10 المعاملات المطلوبة بالكامل)
-            var aiPrediction = await _aiServiceClient.PredictNoShowAsync(new AiPredictRequest(
+            var aiPrediction = reference == null ? await _aiServiceClient.PredictNoShowAsync(new AiPredictRequest(
                 CustomerId: customerId,
                 TotalPastBookings: pastBookings.Count,
                 PastNoShowsCount: pastNoShows.Count,
@@ -102,7 +108,7 @@ namespace BookFlowAI.Api.Controllers
                 IsWeekend: request.DateTime.DayOfWeek == DayOfWeek.Friday || request.DateTime.DayOfWeek == DayOfWeek.Saturday,
                 IsHoliday: false,
                 DaysSinceLastNoShow: daysSinceLastNoShow
-            ));
+            )) : null;
 
             var booking = new Booking
             {
@@ -110,12 +116,25 @@ namespace BookFlowAI.Api.Controllers
                 StaffId = request.StaffId,
                 ServiceId = request.ServiceId,
                 DateTime = request.DateTime,
-                Status = "Pending",
+                Status = reference == null ? "Pending" : "PendingInstaPay",
+                PaymentStatus = reference == null ? null : PaymentStatus.PendingInstaPay,
+                InstaPayRefNumber = reference,
+                LockExpiresAt = reference == null ? null : DateTime.UtcNow.AddMinutes(30),
                 NoShowProbability = aiPrediction?.Probability ?? 0.15
             };
 
+            if (reference != null && await _context.Bookings.AnyAsync(b => b.InstaPayRefNumber == reference))
+                return Conflict(new { message = "This InstaPay reference has already been submitted." });
+            if (receipt != null) booking.ReceiptImageUrl = await StoreReceipt(receipt);
             _context.Bookings.Add(booking);
-            await _context.SaveChangesAsync();
+            try { await _context.SaveChangesAsync(); }
+            catch (DbUpdateException ex) when (ex.InnerException is Microsoft.Data.SqlClient.SqlException sql && sql.Number is 2601 or 2627)
+            {
+                if (booking.ReceiptImageUrl != null)
+                    System.IO.File.Delete(Path.Combine(ReceiptDirectory, Path.GetFileName(booking.ReceiptImageUrl)));
+                return Conflict(new { message = "This InstaPay reference has already been submitted." });
+            }
+            await transaction.CommitAsync();
 
             var customerName = await _context.Users
                 .Where(user => user.Id == customerId)
@@ -168,7 +187,8 @@ namespace BookFlowAI.Api.Controllers
                     b.Service.DurationInMinutes,
                     b.Service.Price,
                     b.Status,
-                    b.NoShowProbability))
+                    b.NoShowProbability, b.PaymentStatus == null ? null : b.PaymentStatus.ToString(),
+                    b.InstaPayRefNumber, b.ReceiptImageUrl, b.LockExpiresAt, b.PaymentVerificationNote))
                 .ToListAsync();
 
             return Ok(bookings);
@@ -205,7 +225,8 @@ namespace BookFlowAI.Api.Controllers
                     b.Service.DurationInMinutes,
                     b.Service.Price,
                     b.Status,
-                    b.NoShowProbability))
+                    b.NoShowProbability, b.PaymentStatus == null ? null : b.PaymentStatus.ToString(),
+                    b.InstaPayRefNumber, b.ReceiptImageUrl, b.LockExpiresAt, b.PaymentVerificationNote))
                 .FirstOrDefaultAsync();
 
             if (booking == null) return NotFound("الحجز غير موجود.");
@@ -224,6 +245,8 @@ namespace BookFlowAI.Api.Controllers
             if (booking == null) return NotFound("الحجز غير موجود.");
             if (booking.Status == "Cancelled") return BadRequest("لا يمكن إعادة جدولة حجز ملغى.");
 
+            if (booking.PaymentStatus != null) return Conflict(new { message = "Cancel and create a new booking to change a payment booking." });
+            await using var transaction = await BeginSlotTransaction(booking.StaffId);
             var service = await _context.Services.FindAsync(booking.ServiceId);
             if (service is null) return BadRequest(new { message = "The booking service no longer exists." });
             var end = request.NewDateTime.AddMinutes(service.DurationInMinutes);
@@ -233,7 +256,7 @@ namespace BookFlowAI.Api.Controllers
                 && schedule.StartTime <= request.NewDateTime.TimeOfDay
                 && schedule.EndTime >= end.TimeOfDay);
             var conflicts = await _context.Bookings.AnyAsync(item => item.Id != id && item.StaffId == booking.StaffId
-                && item.Status != "Cancelled" && item.DateTime < end
+                && item.Status != "Cancelled" && (item.PaymentStatus != PaymentStatus.PendingInstaPay || item.LockExpiresAt > DateTime.UtcNow) && item.DateTime < end
                 && item.DateTime.AddMinutes(item.Service.DurationInMinutes) > request.NewDateTime);
             var isTimeOff = await _context.StaffTimeOffRequests.AnyAsync(item => item.StaffId == booking.StaffId
                 && item.Date == request.NewDateTime.Date && item.Status == "Approved");
@@ -244,6 +267,7 @@ namespace BookFlowAI.Api.Controllers
 
             await _context.SaveChangesAsync();
 
+            await transaction.CommitAsync();
             await NotifyBookingStatusChange(booking.Id, booking.StaffId, "Pending", "تم تعديل موعد الحجز.");
 
             return Ok(new { message = "تم تعديل موعد الحجز بنجاح." });
@@ -262,6 +286,8 @@ namespace BookFlowAI.Api.Controllers
             if (booking.Status == "Cancelled") return BadRequest("الحجز ملغى بالفعل.");
 
             booking.Status = "Cancelled";
+            if (booking.PaymentStatus == PaymentStatus.PendingInstaPay) booking.PaymentStatus = PaymentStatus.Rejected;
+            booking.LockExpiresAt = null;
 
             await _context.SaveChangesAsync();
 
@@ -278,6 +304,8 @@ namespace BookFlowAI.Api.Controllers
             var booking = await _context.Bookings.FindAsync(id);
             if (booking == null) return NotFound("الحجز غير موجود.");
             if (!await CanManageBookingAsync(booking.StaffId)) return Forbid();
+            if (booking.PaymentStatus == PaymentStatus.PendingInstaPay)
+                return Conflict(new { message = "Verify InstaPay payment through the admin payment workflow first." });
 
             if (booking.Status == "Cancelled")
                 return BadRequest("لا يمكن تأكيد حجز تم إلغاؤه.");
@@ -298,6 +326,8 @@ namespace BookFlowAI.Api.Controllers
             var booking = await _context.Bookings.FindAsync(id);
             if (booking == null) return NotFound("الحجز غير موجود.");
             if (!await CanManageBookingAsync(booking.StaffId)) return Forbid();
+            if (booking.PaymentStatus == PaymentStatus.PendingInstaPay)
+                return Conflict(new { message = "Verify InstaPay payment through the admin payment workflow first." });
             if (booking.Status is "Cancelled" or "NoShow")
                 return BadRequest(new { message = "Only active bookings can be completed." });
 
@@ -317,6 +347,8 @@ namespace BookFlowAI.Api.Controllers
             var booking = await _context.Bookings.FindAsync(id);
             if (booking == null) return NotFound("الحجز غير موجود.");
             if (!await CanManageBookingAsync(booking.StaffId)) return Forbid();
+            if (booking.PaymentStatus == PaymentStatus.PendingInstaPay)
+                return Conflict(new { message = "Verify InstaPay payment through the admin payment workflow first." });
             if (booking.Status is "Cancelled" or "Completed")
                 return BadRequest(new { message = "This booking cannot be marked as a no-show." });
 

@@ -7,13 +7,14 @@ function notifyBookingsChanged() {
 
 export type BookingStatus =
     | "Pending"
+    | "PendingInstaPay"
     | "Confirmed"
     | "Completed"
     | "Cancelled"
     | "NoShow";
 
 export type UserRole = "Customer" | "Staff" | "Admin";
-export type PaymentStatus = "Pending" | "Paid" | "Failed" | "Refunded";
+export type PaymentStatus = "PendingInstaPay" | "Confirmed" | "Rejected";
 export type NotificationType = "booking" | "payment" | "system" | "reminder";
 export type ChatRole = "user" | "assistant";
 
@@ -201,6 +202,11 @@ export interface RescheduleBookingDto {
 }
 
 export interface BookingDetailDto {
+    paymentStatus?: PaymentStatus | null;
+    instaPayRefNumber?: string | null;
+    receiptImageUrl?: string | null;
+    lockExpiresAt?: string | null;
+    paymentVerificationNote?: string | null;
     id: number;
     serviceId: number;
     serviceName: string;
@@ -632,6 +638,34 @@ export const accountApi = {
     async changePassword(data: ChangePasswordRequest): Promise<boolean> {
         const response = await api.put<{ success?: boolean; message?: string }>("/account/change-password", data);
         return response.data.success !== false;
+    },
+};
+
+export interface InstaPayPendingTransaction {
+    id: number; customerId: number; customerName: string; staffName: string; serviceName: string;
+    dateTime: string; price: number; instaPayRefNumber: string; receiptImageUrl?: string | null; lockExpiresAt: string;
+}
+export const instaPayApi = {
+    async settings(): Promise<{ recipient: string | null; enabled: boolean; currency: string; lockMinutes: number }> {
+        return (await api.get("/bookings/instapay-settings")).data;
+    },
+    async create(data: CreateBookingDto, reference: string, receipt: File | null): Promise<{ bookingId: number; message: string }> {
+        const form = new FormData();
+        form.set("staffId", String(data.staffId)); form.set("serviceId", String(data.serviceId));
+        form.set("dateTime", data.dateTime); form.set("instaPayRefNumber", reference);
+        if (receipt) form.set("receipt", receipt);
+        const response = await api.post("/bookings/instapay", form, { headers: { "Content-Type": undefined } });
+        notifyBookingsChanged(); return response.data;
+    },
+    async pending(): Promise<InstaPayPendingTransaction[]> { return (await api.get("/admin/instapay-pending")).data; },
+    async verify(id: number, approved: boolean, note: string) {
+        const response = await api.post(`/admin/bookings/${id}/verify-instapay`, { approved, note });
+        notifyBookingsChanged(); return response.data;
+    },
+    async receipt(url: string): Promise<Blob> {
+        // Only request private receipts from the configured API origin.
+        if (!/^\/api\/bookings\/instapay-receipts\/[a-f0-9]{32}\.(png|jpg)$/.test(url)) throw new Error("Invalid receipt URL");
+        return (await api.get(url.slice(4), { responseType: "blob" })).data;
     },
 };
 

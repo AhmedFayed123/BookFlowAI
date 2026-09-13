@@ -121,6 +121,7 @@ namespace BookFlowAI.Api
             // =========================================================
 
             builder.Services.AddSignalR();
+            builder.Services.AddHostedService<BookFlowAI.Api.Services.InstaPayExpiryService>();
 
 
             // =========================================================

@@ -6,6 +6,7 @@ import {
   HttpTransportType,
   LogLevel,
   type IRetryPolicy,
+  type IHttpConnectionOptions,
 } from "@microsoft/signalr";
 import type { BookingNotification, BookingStatusUpdate } from "../lib/api";
 
@@ -49,6 +50,7 @@ export function useSignalR(options: UseSignalROptions = {}) {
   const connectionRef = useRef<HubConnection | null>(null);
   const handlersRef = useRef<Partial<BookingHubEvents>>(options.handlers ?? {});
   const onErrorRef = useRef(options.onError);
+  const startRef = useRef<(() => Promise<void>) | null>(null);
   const retryTimerRef = useRef<number | null>(null);
   const mountedRef = useRef(false);
   const stoppingRef = useRef(false);
@@ -76,7 +78,7 @@ export function useSignalR(options: UseSignalROptions = {}) {
 
   const buildConnection = useCallback(() => {
     const useWebSocket = process.env.NEXT_PUBLIC_SIGNALR_USE_WEBSOCKET === "true";
-    const urlOptions: Record<string, unknown> = {
+    const urlOptions: IHttpConnectionOptions = {
       withCredentials: true,
       accessTokenFactory: () => accessToken ?? resolveAccessToken(),
     };
@@ -84,8 +86,8 @@ export function useSignalR(options: UseSignalROptions = {}) {
       // prefer direct websocket transport when backend supports it to skip negotiation races
       // NOTE: enable by setting NEXT_PUBLIC_SIGNALR_USE_WEBSOCKET=true in your env
       // This sets skipNegotiation and forces WebSocket transport
-      (urlOptions as any).skipNegotiation = true;
-      (urlOptions as any).transport = HttpTransportType.WebSockets;
+      urlOptions.skipNegotiation = true;
+      urlOptions.transport = HttpTransportType.WebSockets;
     }
 
     const connection = new HubConnectionBuilder()
@@ -127,7 +129,7 @@ export function useSignalR(options: UseSignalROptions = {}) {
       let errMessage = "";
       if (caught instanceof Error) errMessage = caught.message;
       else if (typeof caught === "string") errMessage = caught;
-      else if (caught && typeof (caught as any).toString === "function") errMessage = (caught as any).toString();
+      else if (caught != null) errMessage = String(caught);
       const msg = (errMessage || "").toLowerCase();
 
       // Patterns that indicate negotiation/abort races or transient network aborts
@@ -143,11 +145,10 @@ export function useSignalR(options: UseSignalROptions = {}) {
 
       if (transientPatterns.some((p) => msg.includes(p))) {
         // benign during hot reloads / strict-mode double renders — do not escalate
-        // eslint-disable-next-line no-console
         console.debug("SignalR transient startup error (suppressed):", errMessage || caught);
         updateStatus("disconnected", null);
         if (mountedRef.current && !stoppingRef.current) {
-          retryTimerRef.current = window.setTimeout(() => { void start(); }, 5_000);
+          retryTimerRef.current = window.setTimeout(() => { void startRef.current?.(); }, 5_000);
         }
         return;
       }
@@ -155,10 +156,12 @@ export function useSignalR(options: UseSignalROptions = {}) {
       const nextError = caught instanceof Error ? caught : new Error(errMessage || "Live updates are unavailable.");
       updateStatus("error", nextError);
       if (mountedRef.current && !stoppingRef.current) {
-        retryTimerRef.current = window.setTimeout(() => { void start(); }, 5_000);
+        retryTimerRef.current = window.setTimeout(() => { void startRef.current?.(); }, 5_000);
       }
     }
   }, [buildConnection, clearRetry, updateStatus]);
+
+  useEffect(() => { startRef.current = start; }, [start]);
 
   const stop = useCallback(async () => {
     stoppingRef.current = true;
@@ -171,12 +174,10 @@ export function useSignalR(options: UseSignalROptions = {}) {
           await connection.stop();
         } catch (e) {
           // ignore stop errors during shutdown
-          // eslint-disable-next-line no-console
-          console.warn("SignalR stop() failed:", e);
+            console.warn("SignalR stop() failed:", e);
         }
       } else {
         // Skip stopping during Connecting/Reconnecting states to avoid negotiation aborts
-        // eslint-disable-next-line no-console
         console.info("Skipping SignalR.stop() because connection is not connected (state=", connection.state, ")");
       }
     }
@@ -206,8 +207,7 @@ export function useSignalR(options: UseSignalROptions = {}) {
           void connection.stop().catch(() => {/* ignore */ });
         } else {
           // when unmounting during a connect, leave the connection alone; it will either succeed or be closed by the runtime
-          // eslint-disable-next-line no-console
-          console.info("Unmounted during SignalR connect; not calling stop() to avoid negotiation abort.");
+            console.info("Unmounted during SignalR connect; not calling stop() to avoid negotiation abort.");
         }
       }
       connectionRef.current = null;

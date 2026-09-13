@@ -33,6 +33,7 @@ const navigation: Record<
   ],
   Admin: [
     { href: "/admin/dashboard", label: "Operations", icon: CalendarDays },
+    { href: "/admin/instapay", label: "InstaPay payments", icon: BookOpenText },
     { href: "/admin/staff", label: "Team", icon: UsersRound },
     { href: "/admin/knowledge", label: "Knowledge", icon: BookOpenText },
     { href: "/admin/catalog", label: "Catalog", icon: Layers3 },
