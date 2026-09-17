@@ -17,8 +17,11 @@ GEMINI_TIMEOUT_SECONDS = 15
 chroma_client = chromadb.PersistentClient(path="./chroma_db")
 collection = chroma_client.get_or_create_collection(name="business_knowledge_v2")
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-if GEMINI_API_KEY:
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
+# The Generative Language API accepts Google API keys, not OAuth access tokens.
+# Skipping a clearly invalid value avoids a long failed network request.
+GEMINI_ENABLED = GEMINI_API_KEY.startswith("AIza")
+if GEMINI_ENABLED:
     genai.configure(api_key=GEMINI_API_KEY)
     logger.info("تم تفعيل Gemini API بنجاح.")
 else:
@@ -109,7 +112,7 @@ async def generate_chat_response(req: ChatRequest) -> ChatResponse:
 """
 
         # 4. الاستدعاء الحقيقي للـ Gemini API
-        if GEMINI_API_KEY:
+        if GEMINI_ENABLED:
             model = genai.GenerativeModel("gemini-1.5-flash")
             response = await asyncio.wait_for(
                 model.generate_content_async(

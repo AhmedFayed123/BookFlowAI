@@ -60,8 +60,6 @@ services:
       dockerfile: Dockerfile.api
     ports:
       - "5000:8080"
-    volumes:
-      - api_data_protection:/root/.aspnet/DataProtection-Keys
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:8080
@@ -71,6 +69,11 @@ services:
       - JwtSettings__Secret=${JWT_SECRET:-super-secret-key-please-change-this-now-12345}
       - JwtSettings__Issuer=BookFlowAI
       - JwtSettings__Audience=BookFlowAI-Clients
+      - InstaPay__Recipient=${INSTAPAY_RECIPIENT:-}
+      - InstaPay__ReceiptStoragePath=/app/App_Data/receipts
+    volumes:
+      - api_data_protection:/root/.aspnet/DataProtection-Keys
+      - instapay_receipts:/app/App_Data/receipts
     depends_on:
       sqlserver:
         condition: service_healthy
@@ -110,6 +113,7 @@ volumes:
   sqlserver_data:
   frontend_node_modules:
   api_data_protection:
+  instapay_receipts:
 
 networks:
   bookflow-network:

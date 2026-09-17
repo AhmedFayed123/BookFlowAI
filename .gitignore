@@ -363,3 +363,4 @@ MigrationBackup/
 FodyWeavers.xsd
 # Private payment receipt storage
 **/App_Data/receipts/
+docker-compose.override.yml
