@@ -43,7 +43,7 @@ export default function HomePage() {
   };
 
   return (
-    <main className="min-h-screen bg-background text-slate-900">
+    <main className="min-h-screen bg-[#f6f7fb] text-slate-900">
       <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/80 backdrop-blur-xl">
         <nav className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8" aria-label="Primary navigation">
           <Link href="/" aria-label="BookFlow AI home" className="flex items-center gap-3">
@@ -72,7 +72,7 @@ export default function HomePage() {
       <section className="hero-canvas mx-auto grid max-w-7xl gap-10 px-4 py-12 sm:px-6 sm:py-16 lg:grid-cols-[1.1fr_1fr] lg:items-center lg:gap-16 lg:px-8 lg:py-20">
         <div className="soft-enter">
           <p className="section-kicker"><Sparkles className="h-3.5 w-3.5" aria-hidden="true" /> Thoughtfully simple. AI powered.</p>
-          <h1 className="mt-5 max-w-xl text-4xl font-bold leading-[1.06] tracking-[-0.045em] sm:text-5xl lg:text-[4.25rem]">Your next appointment.<br /><span className="text-slate-500">Less back-and-forth.</span></h1>
+          <h1 className="mt-5 max-w-xl text-4xl font-bold leading-[1.04] tracking-[-0.05em] sm:text-5xl lg:text-[4.5rem]">Your next appointment.<br /><span className="text-indigo-600">Less back-and-forth.</span></h1>
           <p className="mt-6 max-w-lg text-base leading-7 text-slate-600 sm:text-lg">Find a service, choose the right person, and pick a time that works. A simpler way to make plans—and keep them.</p>
           <div className="mt-8 flex flex-wrap items-center gap-4">
             <a href="#services" className="inline-flex items-center justify-center gap-3 rounded-lg button-primary px-5 py-3 text-sm font-semibold text-white transition-all duration-200 hover:brightness-110 active:scale-[0.98]">Find a service <ArrowRight className="h-4 w-4" /></a>

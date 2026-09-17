@@ -54,12 +54,10 @@ export default function RegisterPage() {
   };
 
   return (
-    <main className="flex min-h-screen items-center justify-center hero-canvas bg-background px-4 py-12">
+    <main className="flex min-h-screen items-center justify-center bg-[#f6f7fb] px-4 py-12">
       <div className="w-full max-w-lg surface-card rounded-2xl p-8 shadow-[0_20px_60px_-30px_rgba(15,23,42,0.25)] sm:p-10">
         <div className="mb-8 text-center">
-          <div className="section-kicker">
-            BookFlow AI
-          </div>
+          <div className="mx-auto grid size-12 place-items-center rounded-2xl bg-indigo-600 text-lg font-bold text-white shadow-lg shadow-indigo-600/20">B</div>
           <h1 className="mt-4 text-3xl font-bold text-slate-900">
             Create account
           </h1>
