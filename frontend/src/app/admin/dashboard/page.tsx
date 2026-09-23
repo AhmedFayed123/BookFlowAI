@@ -57,6 +57,7 @@ export default function AdminDashboardPage() {
 
     return {
       totalBookingsToday: bookingsToday.length,
+      confirmedToday: bookingsToday.filter((booking) => booking.status === "Confirmed").length,
       pendingRequests,
       averageNoShowRisk,
     };
@@ -237,7 +238,7 @@ export default function AdminDashboardPage() {
 
   return (
     <ProtectedRoute requiredRole="Admin">
-      <WorkspaceShell role="Admin" eyebrow="Admin operations" title="Operations dashboard" description="Monitor demand, booking health, and team activity from one live command center." actions={<>
+      <WorkspaceShell role="Admin" pendingBookingCount={summary.pendingRequests} eyebrow="Admin operations" title="Operations dashboard" description="Monitor demand, booking health, and team activity from one live command center." actions={<>
             <Link href="/admin/staff" className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700">
               Manage staff
             </Link>
@@ -258,15 +259,23 @@ export default function AdminDashboardPage() {
           </div>
         )}
 
-        <DashboardSummaryCards
-          totalBookingsToday={summary.totalBookingsToday}
-          pendingRequests={summary.pendingRequests}
-          averageNoShowRisk={summary.averageNoShowRisk}
-        />
+        <section aria-label="Operational metrics" className="space-y-3">
+          <div className="flex items-end justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-[.14em] text-indigo-700">Command center</p><h2 className="mt-1 text-lg font-semibold text-slate-900">Today's operating pulse</h2></div><span className="hidden text-xs text-slate-500 sm:block">Live booking activity and business trends</span></div>
+          <DashboardSummaryCards
+            totalBookingsToday={summary.totalBookingsToday}
+            confirmedToday={summary.confirmedToday}
+            pendingRequests={summary.pendingRequests}
+            averageNoShowRisk={summary.averageNoShowRisk}
+          />
+        </section>
 
-        <OperationsSnapshot />
-        <AnalyticsPanel />
+        <section aria-label="Live operations and analytics" className="grid items-start gap-5 xl:grid-cols-3">
+          <div className="min-w-0 xl:col-span-2"><AnalyticsPanel /></div>
+          <div className="min-w-0"><OperationsSnapshot /></div>
+        </section>
 
+        <section id="booking-feed" aria-label="Booking management" className="scroll-mt-24 space-y-3">
+        <div><p className="text-xs font-semibold uppercase tracking-[.14em] text-indigo-700">Data management</p><h2 className="mt-1 text-lg font-semibold text-slate-900">Booking desk</h2></div>
         {loading ? (
           <div className="surface-card rounded-2xl p-8 shadow-sm">
             <div className="skeleton-shimmer space-y-4">
@@ -283,6 +292,7 @@ export default function AdminDashboardPage() {
             onStatusChange={handleStatusChange}
           />
         )}
+        </section>
       </WorkspaceShell>
     </ProtectedRoute>
   );

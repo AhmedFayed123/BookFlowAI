@@ -27,7 +27,7 @@ namespace BookFlowAI.Api.Controllers
                 .Where(s => s.IsActive && s.BusinessCategory.IsActive)
                 .OrderBy(s => s.BusinessCategory.Name).ThenBy(s => s.Name)
                 .Select(s => new ServiceDto(s.Id, s.Name, s.Description, s.Price, s.DurationInMinutes,
-                    s.BusinessCategoryId, s.BusinessCategory.Name, s.IsActive, s.Bookings.Count))
+                    s.BusinessCategoryId, s.BusinessCategory.Name, s.IsActive, s.Bookings.Count, s.ImageUrl))
                 .ToListAsync();
 
             return Ok(services);
@@ -41,7 +41,7 @@ namespace BookFlowAI.Api.Controllers
                 .AsNoTracking()
                 .Where(item => item.Id == id && item.IsActive)
                 .Select(item => new ServiceDto(item.Id, item.Name, item.Description, item.Price,
-                    item.DurationInMinutes, item.BusinessCategoryId, item.BusinessCategory.Name, item.IsActive, item.Bookings.Count))
+                    item.DurationInMinutes, item.BusinessCategoryId, item.BusinessCategory.Name, item.IsActive, item.Bookings.Count, item.ImageUrl))
                 .FirstOrDefaultAsync();
             if (service == null) return NotFound("الخدمة غير موجودة.");
 
@@ -63,7 +63,8 @@ namespace BookFlowAI.Api.Controllers
                 Name = dto.Name,
                 Description = dto.Description,
                 Price = dto.Price,
-                DurationInMinutes = dto.DurationInMinutes
+                DurationInMinutes = dto.DurationInMinutes,
+                ImageUrl = dto.ImageUrl
             };
 
             _context.Services.Add(service);
@@ -73,7 +74,7 @@ namespace BookFlowAI.Api.Controllers
                 .Select(category => category.Name).SingleAsync();
             return CreatedAtAction(nameof(GetById), new { id = service.Id },
                 new ServiceDto(service.Id, service.Name, service.Description, service.Price, service.DurationInMinutes,
-                    service.BusinessCategoryId, categoryName, service.IsActive, 0));
+                    service.BusinessCategoryId, categoryName, service.IsActive, 0, service.ImageUrl));
         }
 
         // PUT /api/services/{id} (تعديل خدمة - أدمن فقط)
@@ -92,6 +93,7 @@ namespace BookFlowAI.Api.Controllers
             service.Price = dto.Price;
             service.DurationInMinutes = dto.DurationInMinutes;
             service.IsActive = dto.IsActive;
+            service.ImageUrl = dto.ImageUrl;
 
             await _context.SaveChangesAsync();
             return Ok(new { message = "تم تحديث بيانات الخدمة بنجاح.", service });

@@ -101,6 +101,7 @@ export interface ServiceDto {
     durationInMinutes: number;
     isActive: boolean;
     bookingCount: number;
+    imageUrl?: string | null;
 }
 
 export interface BusinessCategoryDto {
@@ -128,6 +129,7 @@ export interface CreateServiceDto {
     description: string;
     price: number;
     durationInMinutes: number;
+    imageUrl?: string | null;
 }
 
 export interface UpdateServiceDto {
@@ -137,6 +139,7 @@ export interface UpdateServiceDto {
     price: number;
     durationInMinutes: number;
     isActive: boolean;
+    imageUrl?: string | null;
 }
 
 export interface StaffProfileDto {

@@ -364,3 +364,8 @@ FodyWeavers.xsd
 # Private payment receipt storage
 **/App_Data/receipts/
 docker-compose.override.yml
+
+# Local environment settings can contain API keys and payment details.
+.env
+.env.*
+!.env.example

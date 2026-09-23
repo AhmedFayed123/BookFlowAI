@@ -14,7 +14,8 @@
         string Name,
         string Description,
         decimal Price,
-        int DurationInMinutes
+        int DurationInMinutes,
+        string? ImageUrl = null
     );
 
     public record UpdateServiceDto(
@@ -23,7 +24,8 @@
         string Description,
         decimal Price,
         int DurationInMinutes,
-        bool IsActive
+        bool IsActive,
+        string? ImageUrl = null
     );
 
     // Staff Management (legacy DTOs retained for /api/staff compatibility)

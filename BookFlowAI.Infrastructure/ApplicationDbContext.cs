@@ -86,6 +86,7 @@ namespace BookFlowAI.Infrastructure
             {
                 entity.Property(service => service.Name).HasMaxLength(160);
                 entity.Property(service => service.Description).HasMaxLength(1000);
+                entity.Property(service => service.ImageUrl).HasMaxLength(500);
                 entity.HasOne(service => service.BusinessCategory)
                     .WithMany(category => category.Services)
                     .HasForeignKey(service => service.BusinessCategoryId)

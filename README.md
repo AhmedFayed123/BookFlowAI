@@ -40,6 +40,7 @@ Built with enterprise-oriented engineering patterns, the repository combines a l
 ### Features
 
 - **AI conversational booking assistant** — Gemini-powered responses enriched by a ChromaDB RAG pipeline, with helpful local fallbacks when generation or retrieval is unavailable.
+- **Service image support** — admins can add an optional public image URL to each service; catalog cards load images lazily and fall back to category artwork when an image is missing or unavailable.
 - **Real-time availability & slot management** — service duration, provider schedules, time off, available slots, booking creation, cancellation, and rescheduling.
 - **InstaPay manual payments** — EGP checkout with a copyable business IPA/phone number, a unique 12-digit transfer reference, optional private receipt upload, 30-minute slot holds, and admin approval/rejection.
 - **Dynamic reminders & notifications** — a glassmorphic notification center, unread counts, upcoming appointment reminders, booking confirmations, read/dismiss actions, and Sonner action toasts.
@@ -136,7 +137,7 @@ cd BookFlowAI
 
 ### 2. Configure the environment
 
-Create or update the root `.env` file without overwriting credentials you intend to keep:
+Copy `.env.example` to `.env`, then fill in the values for your environment. Keep existing credentials when updating a local file:
 
 ```dotenv
 # Optional: leave empty to use local AI fallback guidance.
@@ -144,12 +145,14 @@ GEMINI_API_KEY=
 
 # Replace with a long, random secret for your environment.
 JWT_SECRET=replace-with-a-long-random-development-secret
+
+# InstaPay IPA or receiving phone number for your business.
+INSTAPAY_RECIPIENT=
 ```
 
 The Compose file currently supplies the development SQL password and connection string directly. Change **both** together if customizing the database credentials. Setting a new password does not automatically update an existing SQL data volume.
 
-> [!WARNING]
-> The root `.env` is currently tracked by Git. Keep real secrets out of tracked files; use untracked configuration overrides or a secret manager, and rotate any credentials previously published.
+The root `.env` is ignored by Git. Never commit it or put real credentials in `.env.example`; use a secret manager for deployed environments.
 
 ### 3. Build and start
 
@@ -162,6 +165,10 @@ docker compose ps
 Or build and start in one command: `docker compose up -d --build`.
 
 The first AI image build can be lengthy because of ML dependencies. SQL Server initialization and the first frontend compilation also take time. The API applies pending EF Core migrations and seeds development data during startup; there is no separate manual SQL setup step.
+
+### Service images
+
+In the admin catalog, add or edit a service and provide an optional, publicly reachable image URL. Service cards display that image when available and use category artwork as a fallback. The `AddImageUrlToService` EF Core migration is applied by the API during startup.
 
 ### 4. Open BookFlow
 

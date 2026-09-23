@@ -12,7 +12,8 @@
         int BusinessCategoryId = 0,
         string BusinessCategoryName = "Uncategorized",
         bool IsActive = true,
-        int BookingCount = 0
+        int BookingCount = 0,
+        string? ImageUrl = null
     );
 
     public record BusinessCategoryDto(
