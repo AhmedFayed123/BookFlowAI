@@ -39,7 +39,7 @@ Built with enterprise-oriented engineering patterns, the repository combines a l
 
 ### Features
 
-- **AI conversational booking assistant** — Gemini-powered responses enriched by a ChromaDB RAG pipeline, with helpful local fallbacks when generation or retrieval is unavailable.
+- **AI conversational booking assistant** — guided booking and payment answers, plus Gemini responses enriched with business data from the ChromaDB RAG pipeline when available.
 - **Service image support** — admins can add an optional public image URL to each service; catalog cards load images lazily and fall back to category artwork when an image is missing or unavailable.
 - **Real-time availability & slot management** — service duration, provider schedules, time off, available slots, booking creation, cancellation, and rescheduling.
 - **InstaPay manual payments** — EGP checkout with a copyable business IPA/phone number, a unique 12-digit transfer reference, optional private receipt upload, 30-minute slot holds, and admin approval/rejection.
@@ -55,7 +55,7 @@ The assistant provides guidance; bookings are created through the authenticated 
 
 | Customer experience | Admin operations | Staff workspace |
 | :---: | :---: | :---: |
-| ![Customer booking experience](image/README/1789117854846.png) | ![Admin operations dashboard](image/README/1789117861391.png) | ![Staff scheduling workspace](image/README/1789117868238.png) |
+| ![Customer booking experience](image/README/1.png) | ![Admin operations dashboard](image/README/2.png) | ![Staff scheduling workspace](image/README/4.png) | ![Auth](image/README/3.png) |
 
 ## System Architecture
 
@@ -208,6 +208,8 @@ Checkout uses manual transfer verification. Customers copy the configured busine
 
 Customers see **⏳ Pending InstaPay verification** while verification is pending. Admins review the customer, provider, appointment time, amount, reference, and private receipt at `/admin/instapay`, then approve or reject with an optional audit note. Verify the reference, recipient, and amount against the business account history before approving. Rejected or expired transfers require manual support/refund handling.
 
+If a customer submits a mistyped reference, the reference cannot currently be edited from **My Bookings**. Contact support before admin review and do not make another transfer until support advises what to do. If the request is rejected, the booking is cancelled and its slot is released; contact support about the original transfer before paying again.
+
 Approval and rejection trigger customer SignalR updates. Notification polling also detects final decisions after customers return, persists an in-app notification in their browser, displays a toast, and refreshes reminders. Email delivery is not configured.
 
 ### Configuration
@@ -256,6 +258,10 @@ dotnet ef database update --project BookFlowAI.Infrastructure --startup-project 
 ```
 
 Reference numbers are unique across all submissions, including rejected transfers. SQL Server transaction locks serialize slot creation, rescheduling, and payment approval per provider; expired holds no longer block availability. Repeated, cancelled, or expired review requests return a conflict. Existing status actions cannot confirm or complete unverified payments, and payment bookings cannot be rescheduled or administratively overridden through the legacy flow.
+
+### AI knowledge and chat
+
+Business details sent through the admin AI configuration are indexed in the AI service's ChromaDB collection for RAG-assisted chat responses. Documents uploaded through **Admin → Knowledge** are stored and chunked in SQL Server, but are not currently included in chatbot retrieval. The assistant also uses API-side guided answers for common booking, cancellation, service, payment, and mistyped-reference questions; these answers take precedence over Gemini/RAG responses.
 
 See the [InstaPay implementation and setup guide](docs/instapay.md) for details.
 

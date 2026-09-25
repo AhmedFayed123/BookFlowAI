@@ -18,7 +18,7 @@ public class InstaPayBookingForm
     [Required, RegularExpression(@"^[0-9]{12}$")] public string InstaPayRefNumber { get; set; } = "";
     public IFormFile? Receipt { get; set; }
 }
-public record VerifyInstaPayRequest([property: Required] bool? Approved, [property: StringLength(500)] string? Note);
+public record VerifyInstaPayRequest([param: Required] bool? Approved, [param: StringLength(500)] string? Note);
 
 public partial class BookingsController
 {

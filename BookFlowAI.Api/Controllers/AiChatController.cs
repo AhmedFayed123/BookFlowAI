@@ -76,6 +76,15 @@ namespace BookFlowAI.Api.Controllers
             // Intent order matters: "book without payment" is about payment, while
             // "cancel a booking" is about cancellation rather than booking steps.
             if (ContainsAny(normalized,
+                "typo", "mistyped", "misspelled", "wrong reference", "incorrect reference", "wrong ref", "incorrect ref", "reference id mistake", "reference number mistake",
+                "غلط في الرقم المرجعي", "خطأ في الرقم المرجعي", "كتبت الرقم المرجعي غلط", "كتبت رقم التحويل غلط", "رقم مرجعي غلط", "الرقم المرجعي غلط"))
+            {
+                return arabic
+                    ? "لا يوجد حاليًا خيار لتعديل الرقم المرجعي بعد إرسال الطلب. تواصل مع الدعم فورًا قبل مراجعة الأدمن، ولا ترسل تحويلًا آخر. إذا رُفض الطلب، سيُلغى الحجز ويُتاح الموعد من جديد؛ استفسر من الدعم عن التحويل قبل إعادة الدفع."
+                    : "There is currently no option to edit the reference after submitting it. Contact support right away before admin review, and do not make another transfer. If the request is rejected, the booking is cancelled and the slot becomes available again; check with support about the transfer before paying again.";
+            }
+
+            if (ContainsAny(normalized,
                 "payment", "pay", "instapay", "without immediate payment", "without paying",
                 "دفع", "ادفع", "إنستاباي", "انستاباي", "بدون دفع"))
             {
